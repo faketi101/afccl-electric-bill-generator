@@ -10,6 +10,87 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #f7fafc;
+}
+
+.app-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.site-footer {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: #e2e8f0;
+    padding: 1.25rem 1rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.site-footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    animation: footer-rise 0.6s ease-out;
+}
+
+.footer-label {
+    font-size: 0.75rem;
+    opacity: 0.75;
+}
+
+.footer-link {
+    color: #7dd3fc;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    position: relative;
+    transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.footer-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #7dd3fc, transparent);
+    opacity: 0.6;
+    transform: scaleX(0.5);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.footer-link:hover {
+    color: #38bdf8;
+    text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.footer-link:hover::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+@keyframes footer-rise {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Responsive Typography */
 @media (max-width: 768px) {
     html {
