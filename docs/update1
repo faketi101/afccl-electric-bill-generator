@@ -1,0 +1,8 @@
+improvement needed,
+
+1. Generate New Bill => need a search option in the selection of customer (both name or meter no)
+- Bill Month (e.g. January 2025) it should be month and year based, so that on Bill Analyzer you can filter by month and year, it will make sense then,
+also a search option on name, meter no, or address needed, you can make a re usable component, a invoice no based search neded on this tab also
+paid date should also save and show on table
+2. a search option with name, meter no or address, on customer management page
+3. on PDF => naming should include the meter-no also, tha paid seal should be a bit top, also include the paid date on invoice, the phone no should be on header not on bottom.
