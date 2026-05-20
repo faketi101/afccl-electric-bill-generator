@@ -59,10 +59,10 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
   const c = invoice.customer || {};
   const s = settings || {};
 
-  const displayName    = getDisplayValue(c.name, c.nameBn);
+  const displayName = getDisplayValue(c.name, c.nameBn);
   const displayAddress = getDisplayValue(c.address, c.addressBn);
   const displayMeterNo = getDisplayValue(c.meterNo, c.meterNoBn);
-  const displayPhone   = getDisplayValue(c.phone || '', c.phoneBn);
+  const displayPhone = getDisplayValue(c.phone || '', c.phoneBn);
 
   const logoHTML = s.logoBase64
     ? `<img src="data:${s.logoMimeType || 'image/png'};base64,${s.logoBase64}" style="width:55px;height:40px;object-fit:contain;">`
@@ -74,15 +74,15 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
   const rows = [
     { label: 'Previous Reading', bnLabel: 'পূর্ববর্তী রিডিং', value: `${formatNumber(invoice.previousReading)} kWh` },
-    { label: 'Current Reading',  bnLabel: 'বর্তমান রিডিং',    value: `${formatNumber(invoice.currentReading)} kWh` },
-    { label: 'Units Consumed',   bnLabel: 'ভোক্ত ইউনিট',      value: `${formatNumber(invoice.unitsConsumed)} kWh` },
-    { label: 'Rate per Unit',    bnLabel: 'প্রতি ইউনিট হার',  value: formatCurrency(invoice.ratePerUnit) },
-    { label: 'Unit Charge',      bnLabel: 'ইউনিট চার্জ',      value: formatCurrency(invoice.unitCharge) },
-    { label: 'Service Charge',   bnLabel: 'সার্ভিস চার্জ',    value: formatCurrency(invoice.serviceCharge || 0) },
+    { label: 'Current Reading', bnLabel: 'বর্তমান রিডিং', value: `${formatNumber(invoice.currentReading)} kWh` },
+    { label: 'Units Consumed', bnLabel: 'ভোক্ত ইউনিট', value: `${formatNumber(invoice.unitsConsumed)} kWh` },
+    { label: 'Rate per Unit', bnLabel: 'প্রতি ইউনিট হার', value: formatCurrency(invoice.ratePerUnit) },
+    { label: 'Unit Charge', bnLabel: 'ইউনিট চার্জ', value: formatCurrency(invoice.unitCharge) },
+    { label: 'Service Charge', bnLabel: 'সার্ভিস চার্জ', value: formatCurrency(invoice.serviceCharge || 0) },
   ];
 
   if (invoice.fine > 0) {
-    const fineLabel   = invoice.fineNote ? `Fine (${invoice.fineNote})` : 'Fine';
+    const fineLabel = invoice.fineNote ? `Fine (${invoice.fineNote})` : 'Fine';
     const fineLabelBn = invoice.fineNote ? `জরিমানা (${invoice.fineNote})` : 'জরিমানা';
     rows.push({ label: fineLabel, bnLabel: fineLabelBn, value: formatCurrency(invoice.fine) });
   }
@@ -92,8 +92,8 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
   const rowsHTML = rows.map(r => `
     <tr>
-      <td style="padding:6px 12px;border:1px solid #ddd;font-size:11px;">${r.label} (${bn(r.bnLabel)})</td>
-      <td style="padding:6px 12px;border:1px solid #ddd;text-align:right;font-size:11px;font-family:monospace;">${r.value}</td>
+      <td style="padding:4px 12px;border:1px solid #ddd;font-size:11px;">${r.label} (${bn(r.bnLabel)})</td>
+      <td style="padding:4px 12px;border:1px solid #ddd;text-align:right;font-size:11px;font-family:monospace;">${r.value}</td>
     </tr>
   `).join('');
 
@@ -113,7 +113,7 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;margin:10px 0;font-size:11px;">
+      <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:11px;">
         <div style="flex:1;">
           <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Invoice No:</span><span style="color:#000;">${invoice.invoiceNo}</span></div>
           <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Bill Month:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth)}</span></div>
@@ -128,24 +128,38 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
         </div>
       </div>
 
-      <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:11px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:11px;">
         <thead>
-          <tr><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:left;font-weight:600;">Description (${bn('বিবরণ')})</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">Amount (${bn('পরিমাণ')})</th></tr>
+          <tr><th style="background:#1e3c78;color:white;padding:6px 12px;text-align:left;font-weight:600;">Description (${bn('বিবরণ')})</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">Amount (${bn('পরিমাণ')})</th></tr>
         </thead>
         <tbody>${rowsHTML}</tbody>
         <tfoot>
-          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;font-size:12px;">TOTAL PAYABLE (${bn('মোট প্রদেয়')})</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount)}</td></tr>
+          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;font-size:12px;">TOTAL PAYABLE (${bn('মোট প্রদেয়')})</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount)}</td></tr>
         </tfoot>
       </table>
 
-      <div style="margin-top:10px;font-size:10px;color:#666;font-style:italic;">${s.footerText || ''}</div>
+      <div style="position:absolute;bottom:6mm;left:15mm;right:15mm;display:flex;justify-content:space-between;align-items:flex-end;">
+        <div style="font-size:10px;color:#666;font-style:italic;max-width:55%;line-height:1.3;">
+          ${s.footerText || ''}
+        </div>
+        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;margin-top:40px">
+          <div style="height:90px;"></div>
+          <div style="border-top:1.5px solid #000;width:210px;padding-top:2px;font-size:12px;font-weight:bold;line-height:1;font-family:Arial, sans-serif;color:#000;">
+            Authorised Signature & Seal
+            <br/>
+            <span style="font-size:10px;font-family:'Tiro Bangla', serif;font-weight:bold;color:#000;">${bn('সংশ্লিষ্ট কর্মকর্তার স্বাক্ষর ও সিল')}</span>
+          </div>
+        </div>
+        
+      </div>
+      
     </div>`;
 }
 
 export async function generateInvoicePDF(invoice, settings, withPaidSeal = false) {
   const c = invoice.customer || {};
 
-  const officeCopyHTML   = buildCopyHTML(invoice, settings, withPaidSeal, 'অফিস কপি (Office Copy)');
+  const officeCopyHTML = buildCopyHTML(invoice, settings, withPaidSeal, 'অফিস কপি (Office Copy)');
   const customerCopyHTML = buildCopyHTML(invoice, settings, withPaidSeal, 'গ্রাহক কপি (Customer Copy)');
 
   const fullHTML = `
