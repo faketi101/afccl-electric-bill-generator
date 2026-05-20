@@ -7,14 +7,27 @@ function toBnNum(n) {
   return String(n).split('').map(d => bnDigits[parseInt(d)] || d).join('');
 }
 
+/**
+ * Wraps every run of Bangla characters in `text` with a <span> that
+ * explicitly sets Tiro Bangla as the font.  Non-Bangla characters are
+ * left untouched so they continue to render in Arial.
+ */
+function bn(text) {
+  if (!text) return '';
+  return String(text).replace(
+    /([\u0980-\u09FF]+)/g,
+    `<span style="font-family: 'Tiro Bangla', serif;">$1</span>`
+  );
+}
+
 function formatNumber(n) {
-  return `${n} (${toBnNum(n)})`;
+  return `${n} (${bn(toBnNum(n))})`;
 }
 
 function formatCurrency(amount) {
   const en = amount.toFixed(2);
-  const bn = toBnNum(en);
-  return `৳ ${en} (${bn})`;
+  const bnStr = bn(toBnNum(en));
+  return `৳ ${en} (${bnStr})`;
 }
 
 function formatDate(date) {
@@ -25,34 +38,34 @@ function formatDate(date) {
   const bnDay = toBnNum(enDay);
   const bnMonth = toBnNum(enMonth);
   const bnYear = toBnNum(enYear);
-  return `${enDay}/${enMonth}/${enYear} (${bnDay}/${bnMonth}/${bnYear})`;
+  return `${enDay}/${enMonth}/${enYear} (${bn(`${bnDay}/${bnMonth}/${bnYear}`)})`;
 }
 
 function formatBillMonth(bm) {
   if (!bm) return '';
   const parts = bm.split('-');
   if (parts.length === 2) {
-    return `${bm} (${toBnNum(parts[0])}-${toBnNum(parts[1])})`;
+    return `${bm} (${bn(`${toBnNum(parts[0])}-${toBnNum(parts[1])}`)})`;
   }
   return bm;
 }
 
-function getDisplayValue(en, bn) {
-  if (bn) return `${en} (${bn})`;
+function getDisplayValue(en, bnVal) {
+  if (bnVal) return `${en} (${bn(bnVal)})`;
   return en;
 }
 
 function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
   const c = invoice.customer || {};
   const s = settings || {};
-  
-  const displayName = getDisplayValue(c.name, c.nameBn);
+
+  const displayName    = getDisplayValue(c.name, c.nameBn);
   const displayAddress = getDisplayValue(c.address, c.addressBn);
   const displayMeterNo = getDisplayValue(c.meterNo, c.meterNoBn);
-  const displayPhone = getDisplayValue(c.phone || '', c.phoneBn);
+  const displayPhone   = getDisplayValue(c.phone || '', c.phoneBn);
 
-  const logoHTML = s.logoBase64 
-    ? `<img src="data:${s.logoMimeType || 'image/png'};base64,${s.logoBase64}" style="width:55px;height:40px;object-fit:contain;">` 
+  const logoHTML = s.logoBase64
+    ? `<img src="data:${s.logoMimeType || 'image/png'};base64,${s.logoBase64}" style="width:55px;height:40px;object-fit:contain;">`
     : '';
 
   const paidSealHTML = (withPaidSeal && invoice.status === 'paid')
@@ -61,15 +74,15 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
   const rows = [
     { label: 'Previous Reading', bnLabel: 'পূর্ববর্তী রিডিং', value: `${formatNumber(invoice.previousReading)} kWh` },
-    { label: 'Current Reading', bnLabel: 'বর্তমান রিডিং', value: `${formatNumber(invoice.currentReading)} kWh` },
-    { label: 'Units Consumed', bnLabel: 'ভোক্ত ইউনিট', value: `${formatNumber(invoice.unitsConsumed)} kWh` },
-    { label: 'Rate per Unit', bnLabel: 'প্রতি ইউনিট হার', value: formatCurrency(invoice.ratePerUnit) },
-    { label: 'Unit Charge', bnLabel: 'ইউনিট চার্জ', value: formatCurrency(invoice.unitCharge) },
-    { label: 'Service Charge', bnLabel: 'সার্ভিস চার্জ', value: formatCurrency(invoice.serviceCharge || 0) },
+    { label: 'Current Reading',  bnLabel: 'বর্তমান রিডিং',    value: `${formatNumber(invoice.currentReading)} kWh` },
+    { label: 'Units Consumed',   bnLabel: 'ভোক্ত ইউনিট',      value: `${formatNumber(invoice.unitsConsumed)} kWh` },
+    { label: 'Rate per Unit',    bnLabel: 'প্রতি ইউনিট হার',  value: formatCurrency(invoice.ratePerUnit) },
+    { label: 'Unit Charge',      bnLabel: 'ইউনিট চার্জ',      value: formatCurrency(invoice.unitCharge) },
+    { label: 'Service Charge',   bnLabel: 'সার্ভিস চার্জ',    value: formatCurrency(invoice.serviceCharge || 0) },
   ];
 
   if (invoice.fine > 0) {
-    const fineLabel = invoice.fineNote ? `Fine (${invoice.fineNote})` : 'Fine';
+    const fineLabel   = invoice.fineNote ? `Fine (${invoice.fineNote})` : 'Fine';
     const fineLabelBn = invoice.fineNote ? `জরিমানা (${invoice.fineNote})` : 'জরিমানা';
     rows.push({ label: fineLabel, bnLabel: fineLabelBn, value: formatCurrency(invoice.fine) });
   }
@@ -79,7 +92,7 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
   const rowsHTML = rows.map(r => `
     <tr>
-      <td style="padding:6px 12px;border:1px solid #ddd;font-size:11px;">${r.label} (${r.bnLabel})</td>
+      <td style="padding:6px 12px;border:1px solid #ddd;font-size:11px;">${r.label} (${bn(r.bnLabel)})</td>
       <td style="padding:6px 12px;border:1px solid #ddd;text-align:right;font-size:11px;font-family:monospace;">${r.value}</td>
     </tr>
   `).join('');
@@ -96,7 +109,7 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
         </div>
         <div style="text-align:right;">
           <div style="font-size:15px;font-weight:700;color:#1e3c78;">${s.invoiceTitle || 'ELECTRICITY BILL'}</div>
-          <div style="font-size:11px;color:#000;margin-top:3px;">${copyLabel}</div>
+          <div style="font-size:11px;color:#000;margin-top:3px;">${bn(copyLabel)}</div>
         </div>
       </div>
 
@@ -117,11 +130,11 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
       <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:11px;">
         <thead>
-          <tr><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:left;font-weight:600;">Description (বিবরণ)</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">Amount (পরিমাণ)</th></tr>
+          <tr><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:left;font-weight:600;">Description (${bn('বিবরণ')})</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">Amount (${bn('পরিমাণ')})</th></tr>
         </thead>
         <tbody>${rowsHTML}</tbody>
         <tfoot>
-          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;font-size:12px;">TOTAL PAYABLE (মোট প্রদেয়)</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount)}</td></tr>
+          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;font-size:12px;">TOTAL PAYABLE (${bn('মোট প্রদেয়')})</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount)}</td></tr>
         </tfoot>
       </table>
 
@@ -131,8 +144,8 @@ function buildCopyHTML(invoice, settings, withPaidSeal, copyLabel) {
 
 export async function generateInvoicePDF(invoice, settings, withPaidSeal = false) {
   const c = invoice.customer || {};
-  
-  const officeCopyHTML = buildCopyHTML(invoice, settings, withPaidSeal, 'অফিস কপি (Office Copy)');
+
+  const officeCopyHTML   = buildCopyHTML(invoice, settings, withPaidSeal, 'অফিস কপি (Office Copy)');
   const customerCopyHTML = buildCopyHTML(invoice, settings, withPaidSeal, 'গ্রাহক কপি (Customer Copy)');
 
   const fullHTML = `
@@ -141,8 +154,24 @@ export async function generateInvoicePDF(invoice, settings, withPaidSeal = false
 <head>
   <meta charset="UTF-8">
   <style>
+    /* Tiro Bangla – Bangla script only */
+    @font-face {
+      font-family: 'Tiro Bangla';
+      font-style: normal;
+      font-weight: 400;
+      font-display: block;
+      src: url('https://fonts.gstatic.com/s/tirobangla/v6/IFSgHe1Tm95E3O8b5i2V8MG9.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Tiro Bangla';
+      font-style: italic;
+      font-weight: 400;
+      font-display: block;
+      src: url('https://fonts.gstatic.com/s/tirobangla/v6/IFSiHe1Tm95E3O8b5i2V8PG_80c.ttf') format('truetype');
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; }
+    /* English text uses Arial by default */
+    body { font-family: Arial, sans-serif; }
     .page {
       width: 210mm;
       height: 297mm;
@@ -162,7 +191,7 @@ export async function generateInvoicePDF(invoice, settings, withPaidSeal = false
       position: relative;
     }
     .cut-line::after {
-      content: '✂ এখানে কাটুন (Cut here)';
+      content: '✂ ${bn('এখানে কাটুন')} (Cut here)';
       position: absolute;
       left: 15mm;
       top: -10px;
@@ -189,7 +218,9 @@ export async function generateInvoicePDF(invoice, settings, withPaidSeal = false
   container.style.width = '210mm';
   document.body.appendChild(container);
 
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Allow Tiro Bangla font to download and paint before html2canvas captures
+  await document.fonts.ready;
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   try {
     const canvas = await html2canvas(container.querySelector('.page'), {
