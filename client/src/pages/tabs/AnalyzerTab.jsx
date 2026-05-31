@@ -1,7 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
 import api from "../../api";
-import { generateInvoicePDF, viewInvoicePDF } from "../../utils/pdfGenerator";
+import {
+  generateInvoicePDF,
+  generateMonthlyLegalBillsPDF,
+  viewInvoicePDF,
+  viewMonthlyLegalBillsPDF,
+} from "../../utils/pdfGenerator";
 import { downloadFilteredInvoicesXlsx } from "../../utils/xlsxDownload";
+
+const supportsMonthInput = (() => {
+  const input = document.createElement("input");
+  input.setAttribute("type", "month");
+  return input.type === "month";
+})();
 
 export default function AnalyzerTab() {
   const [invoices, setInvoices] = useState([]);
@@ -14,6 +25,10 @@ export default function AnalyzerTab() {
   const [config, setConfig] = useState({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [batchCopyType, setBatchCopyType] = useState("customer");
+  const [batchWithPaidSeal, setBatchWithPaidSeal] = useState(false);
+  const [batchPrintBusy, setBatchPrintBusy] = useState(false);
+  const [batchPrintError, setBatchPrintError] = useState("");
 
   const load = async () => {
     const [inv, c, s, cf] = await Promise.all([
@@ -105,6 +120,37 @@ export default function AnalyzerTab() {
     });
   }, [filter, generationFilter, rows, searchQuery]);
 
+  const monthlyGeneratedRows = useMemo(() => {
+    if (!monthFilter) return [];
+
+    return rows
+      .filter((row) => row.generated && row.invoice)
+      .sort((a, b) => {
+        const aCustomer = a.customer || a.invoice?.customer || {};
+        const bCustomer = b.customer || b.invoice?.customer || {};
+        const aKey = aCustomer.meterNo || aCustomer.name || a.invoice.invoiceNo;
+        const bKey = bCustomer.meterNo || bCustomer.name || b.invoice.invoiceNo;
+        return String(aKey || "").localeCompare(String(bKey || ""), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+  }, [monthFilter, rows]);
+
+  const monthlyGeneratedInvoices = useMemo(
+    () => monthlyGeneratedRows.map((row) => row.invoice),
+    [monthlyGeneratedRows],
+  );
+
+  const monthlyMissingRows = useMemo(() => {
+    if (!monthFilter) return [];
+    return rows.filter((row) => !row.generated && row.customer);
+  }, [monthFilter, rows]);
+
+  const monthlyCopyCount =
+    monthlyGeneratedInvoices.length * (batchCopyType === "both" ? 2 : 1);
+  const monthlyLegalPageCount = Math.ceil(monthlyCopyCount / 3);
+
   useEffect(() => {
     setPage(1);
   }, [filter, generationFilter, monthFilter, searchQuery, pageSize]);
@@ -184,6 +230,65 @@ export default function AnalyzerTab() {
       totalPaid,
       totalUnpaid,
     });
+  };
+
+  const confirmMissingBills = () => {
+    if (monthlyMissingRows.length === 0) return true;
+
+    const previewNames = monthlyMissingRows
+      .slice(0, 8)
+      .map((row) => row.customer?.name || row.customer?.meterNo || "Unnamed")
+      .join(", ");
+    const remainingCount = monthlyMissingRows.length - 8;
+    const moreText =
+      remainingCount > 0 ? `\n...and ${remainingCount} more.` : "";
+
+    return confirm(
+      `${monthlyMissingRows.length} customer(s) do not have generated bills for ${monthFilter}.\n${previewNames}${moreText}\n\nContinue with generated bills only?`,
+    );
+  };
+
+  const handleMonthlyLegalPdf = async (mode) => {
+    setBatchPrintError("");
+
+    if (!monthFilter) {
+      setBatchPrintError("Select a bill month before creating legal print PDF.");
+      return;
+    }
+
+    if (monthlyGeneratedInvoices.length === 0) {
+      setBatchPrintError("No generated bills found for the selected month.");
+      return;
+    }
+
+    if (!confirmMissingBills()) return;
+
+    setBatchPrintBusy(true);
+    try {
+      const options = {
+        invoices: monthlyGeneratedInvoices,
+        settings,
+        config,
+        billMonth: monthFilter,
+        copyType: batchCopyType,
+        withPaidSeal: batchWithPaidSeal,
+      };
+
+      if (mode === "download") {
+        await generateMonthlyLegalBillsPDF(options);
+      } else {
+        await viewMonthlyLegalBillsPDF({
+          ...options,
+          autoPrint: mode === "print",
+        });
+      }
+    } catch (err) {
+      setBatchPrintError(
+        err?.message || "Could not create the monthly legal print PDF.",
+      );
+    } finally {
+      setBatchPrintBusy(false);
+    }
   };
 
   // Summary stats
@@ -286,19 +391,24 @@ export default function AnalyzerTab() {
           ))}
         </div>
 
-        <select
+        <input
+          type={supportsMonthInput ? "month" : "text"}
           className="form-input"
+          list={supportsMonthInput ? undefined : "bill-month-options"}
+          placeholder="YYYY-MM"
           value={monthFilter}
           onChange={(e) => setMonthFilter(e.target.value)}
           style={{ maxWidth: "180px" }}
-        >
-          <option value="">All months</option>
+        />
+        {!supportsMonthInput && (
+          <datalist id="bill-month-options">
           {monthOptions.map((month) => (
             <option key={month} value={month}>
               {month}
             </option>
           ))}
-        </select>
+          </datalist>
+        )}
 
         <select
           className="form-input"
@@ -329,6 +439,146 @@ export default function AnalyzerTab() {
         >
           Download XLSX
         </button>
+      </div>
+
+      <div
+        className="card mb-2"
+        style={{ border: "1px solid #bee3f8", boxShadow: "none" }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: "1rem",
+          }}
+        >
+          <div>
+            <div className="card-label">Legal Batch Print</div>
+            <div
+              style={{
+                color: "#2d3748",
+                fontWeight: 700,
+                lineHeight: 1.4,
+              }}
+            >
+              {monthFilter
+                ? `${monthlyGeneratedInvoices.length} bills, ${monthlyCopyCount} slips, ${monthlyLegalPageCount} legal pages`
+                : "Select a month"}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              gap: "0.75rem",
+            }}
+          >
+            <label style={{ minWidth: "160px" }}>
+              <span className="form-label">Month</span>
+              <input
+                type={supportsMonthInput ? "month" : "text"}
+                className="form-input"
+                list={supportsMonthInput ? undefined : "bill-month-options"}
+                placeholder="YYYY-MM"
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+              />
+            </label>
+
+            <label style={{ minWidth: "160px" }}>
+              <span className="form-label">Copy</span>
+              <select
+                className="form-input"
+                value={batchCopyType}
+                onChange={(e) => setBatchCopyType(e.target.value)}
+              >
+                <option value="customer">Customer Copy</option>
+                <option value="office">Office Copy</option>
+                <option value="both">Both Copies</option>
+              </select>
+            </label>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                minHeight: "42px",
+                color: "#2d3748",
+                fontWeight: 700,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={batchWithPaidSeal}
+                onChange={(e) => setBatchWithPaidSeal(e.target.checked)}
+              />
+              Paid seal
+            </label>
+
+            <button
+              type="button"
+              onClick={() => handleMonthlyLegalPdf("print")}
+              className="btn btn-primary"
+              disabled={batchPrintBusy}
+              style={{ background: "#1a365d" }}
+            >
+              {batchPrintBusy ? "Generating..." : "Print Legal PDF"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleMonthlyLegalPdf("download")}
+              className="btn"
+              disabled={batchPrintBusy}
+              style={{
+                background: "#fff",
+                color: "#1a365d",
+                border: "1px solid #90cdf4",
+              }}
+            >
+              Download Legal PDF
+            </button>
+          </div>
+        </div>
+
+        {monthFilter && monthlyMissingRows.length > 0 && (
+          <div
+            style={{
+              marginTop: "0.9rem",
+              padding: "0.75rem",
+              borderRadius: "4px",
+              border: "1px solid #f6ad55",
+              background: "#fffaf0",
+              color: "#744210",
+              fontWeight: 700,
+            }}
+          >
+            Warning: {monthlyMissingRows.length} customer
+            {monthlyMissingRows.length === 1 ? "" : "s"} left to generate for{" "}
+            {monthFilter}.
+          </div>
+        )}
+
+        {batchPrintError && (
+          <div
+            style={{
+              marginTop: "0.9rem",
+              padding: "0.75rem",
+              borderRadius: "4px",
+              border: "1px solid #feb2b2",
+              background: "#fff5f5",
+              color: "#742a2a",
+              fontWeight: 700,
+            }}
+          >
+            {batchPrintError}
+          </div>
+        )}
       </div>
 
       <div

@@ -8,6 +8,15 @@ const PDF_LANGUAGE = {
   ENGLISH: "english",
   BOTH: "bangla_english",
 };
+const COPY_TYPES = {
+  OFFICE: "office",
+  CUSTOMER: "customer",
+  BOTH: "both",
+};
+const LEGAL_PAGE = {
+  width: 215.9,
+  height: 355.6,
+};
 
 function normalizePdfLanguage(language) {
   if (language === "bangla") return PDF_LANGUAGE.BANGLA;
@@ -104,25 +113,30 @@ function formatKwh(language) {
   return language === PDF_LANGUAGE.BANGLA ? bn("কিলোওয়াট ঘণ্টা") : "kWh";
 }
 
-function formatAmountWords(amount, language) {
+function formatAmountWords(amount, language, compact = false) {
   const amountWords = formatAmountInWords(amount);
+  const padding = compact ? "3px 8px" : "6px 12px";
+  const fontSize = compact ? "7.8px" : "9.5px";
+  const lineHeight = compact ? "1.22" : "1.35";
+  const boxStyle = `border:1px solid #ddd;border-top:0;padding:${padding};font-size:${fontSize};line-height:${lineHeight};color:#1a202c;background:#fff;`;
+
   if (language === PDF_LANGUAGE.BANGLA) {
     return `
-          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+          <div style="${boxStyle}">
             <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
           </div>
         `;
   }
   if (language === PDF_LANGUAGE.ENGLISH) {
     return `
-          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+          <div style="${boxStyle}">
             <div><strong>In words:</strong> ${amountWords.english}</div>
           </div>
         `;
   }
 
   return `
-          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+          <div style="${boxStyle}">
             <div><strong>In words:</strong> ${amountWords.english}</div>
             <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
           </div>
@@ -135,9 +149,94 @@ function buildCopyHTML(
   language,
   withPaidSeal,
   copyLabel,
+  layoutMode = "standard",
 ) {
   const c = invoice.customer || {};
   const s = settings || {};
+  const compact = layoutMode === "compact";
+  const layout = compact
+    ? {
+        padding: "6mm 9mm",
+        headerGap: "8px",
+        headerMarginBottom: "5px",
+        headerPaddingBottom: "5px",
+        logoSlotWidth: "48px",
+        logoWidth: "44px",
+        logoHeight: "30px",
+        companyFont: "14px",
+        addressFont: "8.8px",
+        addressLineHeight: "1.25",
+        contactFont: "8.3px",
+        titleFont: "12px",
+        copyFont: "8.8px",
+        detailFont: "8.7px",
+        detailMargin: "3px 0",
+        detailRowMargin: "3px",
+        labelWidth: "66px",
+        tableMargin: "3px",
+        tableFont: "8.6px",
+        rowPadding: "2px 8px",
+        headerPaddingLeft: "4px 8px",
+        headerPaddingRight: "5px 8px",
+        totalPadding: "4px 8px",
+        totalFont: "9.2px",
+        footerBottom: "3.5mm",
+        footerSide: "9mm",
+        footerFont: "7.6px",
+        footerLineHeight: "1.2",
+        signatureSpacer: "34px",
+        signatureWidth: "150px",
+        signatureFont: "8.2px",
+        signatureMarginTop: "14px",
+        paidSealTop: "15mm",
+        paidSealRight: "9mm",
+        paidSealWidth: "66px",
+        paidSealHeight: "30px",
+        paidSealBorder: "2px",
+        paidSealFont: "10px",
+        paidSealDateFont: "7.5px",
+      }
+    : {
+        padding: "12.7mm 15mm",
+        headerGap: "12px",
+        headerMarginBottom: "10px",
+        headerPaddingBottom: "10px",
+        logoSlotWidth: "60px",
+        logoWidth: "55px",
+        logoHeight: "40px",
+        companyFont: "17px",
+        addressFont: "11px",
+        addressLineHeight: "1.4",
+        contactFont: "10px",
+        titleFont: "15px",
+        copyFont: "11px",
+        detailFont: "11px",
+        detailMargin: "6px 0",
+        detailRowMargin: "5px",
+        labelWidth: "80px",
+        tableMargin: "6px",
+        tableFont: "11px",
+        rowPadding: "4px 12px",
+        headerPaddingLeft: "6px 12px",
+        headerPaddingRight: "10px 12px",
+        totalPadding: "8px 12px",
+        totalFont: "12px",
+        footerBottom: "6mm",
+        footerSide: "15mm",
+        footerFont: "10px",
+        footerLineHeight: "1.3",
+        signatureSpacer: "90px",
+        signatureWidth: "210px",
+        signatureFont: "12px",
+        signatureMarginTop: "40px",
+        paidSealTop: "25mm",
+        paidSealRight: "15mm",
+        paidSealWidth: "85px",
+        paidSealHeight: "40px",
+        paidSealBorder: "3px",
+        paidSealFont: "14px",
+        paidSealDateFont: "10px",
+      };
 
   const displayName = formatDisplayValue(c.name, c.nameBn, language);
   const displayAddress = formatDisplayValue(c.address, c.addressBn, language);
@@ -163,12 +262,12 @@ function buildCopyHTML(
   const paidDate = invoice.paidAt ? formatDate(invoice.paidAt, language) : "";
 
   const logoHTML = s.logoBase64
-    ? `<img src="data:${s.logoMimeType || "image/png"};base64,${s.logoBase64}" style="width:55px;height:40px;object-fit:contain;">`
+    ? `<img src="data:${s.logoMimeType || "image/png"};base64,${s.logoBase64}" style="width:${layout.logoWidth};height:${layout.logoHeight};object-fit:contain;">`
     : "";
 
   const paidSealHTML =
     withPaidSeal && invoice.status === "paid"
-      ? `<div style="position:absolute;top:25mm;right:15mm;width:85px;height:40px;border:3px solid #22c55e;color:#22c55e;transform:rotate(-15deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:14px;font-weight:bold;"><span>${paidLabel}</span><span style="font-size:10px;font-weight:normal;">${paidDate}</span></div>`
+      ? `<div style="position:absolute;top:${layout.paidSealTop};right:${layout.paidSealRight};width:${layout.paidSealWidth};height:${layout.paidSealHeight};border:${layout.paidSealBorder} solid #22c55e;color:#22c55e;transform:rotate(-15deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:${layout.paidSealFont};font-weight:bold;"><span>${paidLabel}</span><span style="font-size:${layout.paidSealDateFont};font-weight:normal;">${paidDate}</span></div>`
       : "";
 
   const rows = [
@@ -228,65 +327,69 @@ function buildCopyHTML(
     .map(
       (r) => `
     <tr>
-      <td style="padding:4px 12px;border:1px solid #ddd;font-size:11px;">${formatLabel(r.label, r.bnLabel, language)}</td>
-      <td style="padding:4px 12px;border:1px solid #ddd;text-align:right;font-size:11px;font-family:monospace;">${r.value}</td>
+      <td style="padding:${layout.rowPadding};border:1px solid #ddd;font-size:${layout.tableFont};">${formatLabel(r.label, r.bnLabel, language)}</td>
+      <td style="padding:${layout.rowPadding};border:1px solid #ddd;text-align:right;font-size:${layout.tableFont};font-family:monospace;">${r.value}</td>
     </tr>
   `,
     )
     .join("");
 
-  const totalAmountWordsHTML = formatAmountWords(invoice.totalAmount, language);
+  const totalAmountWordsHTML = formatAmountWords(
+    invoice.totalAmount,
+    language,
+    compact,
+  );
 
   return `
-    <div style="position:relative;padding:12.7mm 15mm;height:100%;">
+    <div style="position:relative;padding:${layout.padding};height:100%;">
       ${paidSealHTML}
-      <div style="display:flex;gap:12px;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid #1e3c78;">
-        <div style="width:60px;flex-shrink:0;">${logoHTML}</div>
+      <div style="display:flex;gap:${layout.headerGap};margin-bottom:${layout.headerMarginBottom};padding-bottom:${layout.headerPaddingBottom};border-bottom:2px solid #1e3c78;">
+        <div style="width:${layout.logoSlotWidth};flex-shrink:0;">${logoHTML}</div>
         <div style="flex:1;">
-          <div style="font-size:17px;font-weight:700;color:#1e3c78;margin-bottom:3px;">${companyName}</div>
-          <div style="font-size:11px;color:#000;line-height:1.4;">${headerAddressLabel}: ${companyAddress}</div>
-          <div style="font-size:10px;color:#000;margin-top:2px;">${headerPhoneLabel}: ${companyPhone}, ${headerEmailLabel}: ${companyEmail}</div>
+          <div style="font-size:${layout.companyFont};font-weight:700;color:#1e3c78;margin-bottom:3px;">${companyName}</div>
+          <div style="font-size:${layout.addressFont};color:#000;line-height:${layout.addressLineHeight};">${headerAddressLabel}: ${companyAddress}</div>
+          <div style="font-size:${layout.contactFont};color:#000;margin-top:2px;">${headerPhoneLabel}: ${companyPhone}, ${headerEmailLabel}: ${companyEmail}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:15px;font-weight:700;color:#1e3c78;">${invoiceTitle}</div>
-          <div style="font-size:11px;color:#000;margin-top:3px;">${copyLabel}</div>
+          <div style="font-size:${layout.titleFont};font-weight:700;color:#1e3c78;">${invoiceTitle}</div>
+          <div style="font-size:${layout.copyFont};color:#000;margin-top:3px;">${copyLabel}</div>
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:11px;">
+      <div style="display:flex;justify-content:space-between;margin:${layout.detailMargin};font-size:${layout.detailFont};">
        
         <div style="flex:1;">
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="color:#000;">${displayName}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="color:#000;">${displayAddress}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="color:#000;">${displayMeterNo}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Phone", "ফোন", language)}:</span><span style="color:#000;">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="color:#000;">${displayName}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="color:#000;">${displayAddress}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="color:#000;">${displayMeterNo}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Phone", "ফোন", language)}:</span><span style="color:#000;">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
         </div>
          <div style="flex:1;">
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="color:#000;">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth, language)}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="color:#000;">${formatDate(invoice.issueDate, language)}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="color:#000;">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="color:#000;">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth, language)}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="color:#000;">${formatDate(invoice.issueDate, language)}</span></div>
+          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="color:#000;">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
         </div>
       </div>
 
-      <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:11px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:${layout.tableMargin};font-size:${layout.tableFont};">
         <thead>
-          <tr><th style="background:#1e3c78;color:white;padding:6px 12px;text-align:left;font-weight:600;">${formatLabel("Description", "বিবরণ", language)}</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">${formatLabel("Amount", "পরিমাণ", language)}</th></tr>
+          <tr><th style="background:#1e3c78;color:white;padding:${layout.headerPaddingLeft};text-align:left;font-weight:600;">${formatLabel("Description", "বিবরণ", language)}</th><th style="background:#1e3c78;color:white;padding:${layout.headerPaddingRight};text-align:right;font-weight:600;">${formatLabel("Amount", "পরিমাণ", language)}</th></tr>
         </thead>
         <tbody>${rowsHTML}</tbody>
         <tfoot>
-          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;font-size:12px;">${formatLabel("TOTAL PAYABLE", "মোট প্রদেয়", language)}</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount, language)}</td></tr>
+          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:${layout.totalPadding};font-size:${layout.totalFont};">${formatLabel("TOTAL PAYABLE", "মোট প্রদেয়", language)}</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:${layout.totalPadding};text-align:right;font-size:${layout.totalFont};">${formatCurrency(invoice.totalAmount, language)}</td></tr>
         </tfoot>
       </table>
       ${totalAmountWordsHTML}
 
-      <div style="position:absolute;bottom:6mm;left:15mm;right:15mm;display:flex;justify-content:space-between;align-items:flex-end;">
-        <div style="font-size:10px;color:#666;font-style:italic;max-width:55%;line-height:1.3;">
+      <div style="position:absolute;bottom:${layout.footerBottom};left:${layout.footerSide};right:${layout.footerSide};display:flex;justify-content:space-between;align-items:flex-end;">
+        <div style="font-size:${layout.footerFont};color:#666;font-style:italic;max-width:55%;line-height:${layout.footerLineHeight};">
           ${footerText}
         </div>
-        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;margin-top:40px">
-          <div style="height:90px;"></div>
-          <div style="border-top:1.5px solid #000;width:210px;padding-top:2px;font-size:12px;font-weight:bold;line-height:1;font-family:Arial, sans-serif;color:#000;">
+        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;margin-top:${layout.signatureMarginTop}">
+          <div style="height:${layout.signatureSpacer};"></div>
+          <div style="border-top:1.5px solid #000;width:${layout.signatureWidth};padding-top:2px;font-size:${layout.signatureFont};font-weight:bold;line-height:1;font-family:Arial, sans-serif;color:#000;">
             ${formatLabel("Authorised Signature & Seal", "সংশ্লিষ্ট কর্মকর্তার স্বাক্ষর ও সিল", language)}
           </div>
         </div>
@@ -294,6 +397,241 @@ function buildCopyHTML(
       </div>
       
     </div>`;
+}
+
+function buildFontCSS() {
+  return `
+    @font-face {
+      font-family: 'Tiro Bangla';
+      font-style: normal;
+      font-weight: 400;
+      font-display: block;
+      src: url('https://fonts.gstatic.com/s/tirobangla/v6/IFSgHe1Tm95E3O8b5i2V8MG9.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Tiro Bangla';
+      font-style: italic;
+      font-weight: 400;
+      font-display: block;
+      src: url('https://fonts.gstatic.com/s/tirobangla/v6/IFSiHe1Tm95E3O8b5i2V8PG_80c.ttf') format('truetype');
+    }
+  `;
+}
+
+function getCutLineText(language) {
+  if (language === PDF_LANGUAGE.BANGLA) return "✂ এখানে কাটুন";
+  if (language === PDF_LANGUAGE.ENGLISH) return "✂ Cut here";
+  return "✂ এখানে কাটুন (Cut here)";
+}
+
+function sanitizeFilenamePart(value, fallback = "bills") {
+  const clean = String(value || "")
+    .trim()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return clean || fallback;
+}
+
+function normalizeCopyType(copyType) {
+  if (copyType === COPY_TYPES.OFFICE) return COPY_TYPES.OFFICE;
+  if (copyType === COPY_TYPES.BOTH) return COPY_TYPES.BOTH;
+  return COPY_TYPES.CUSTOMER;
+}
+
+function buildBatchCopyItems(invoices, copyType, language) {
+  const normalizedCopyType = normalizeCopyType(copyType);
+
+  return invoices.flatMap((invoice) => {
+    const officeCopy = {
+      invoice,
+      copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
+    };
+    const customerCopy = {
+      invoice,
+      copyLabel: formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
+    };
+
+    if (normalizedCopyType === COPY_TYPES.OFFICE) return [officeCopy];
+    if (normalizedCopyType === COPY_TYPES.BOTH) {
+      return [officeCopy, customerCopy];
+    }
+    return [customerCopy];
+  });
+}
+
+function buildLegalBatchHTML({
+  invoices,
+  settings,
+  language,
+  withPaidSeal,
+  copyType,
+}) {
+  const cutLineText = getCutLineText(language);
+  const copyItems = buildBatchCopyItems(invoices, copyType, language);
+  const pages = [];
+
+  for (let i = 0; i < copyItems.length; i += 3) {
+    const slots = copyItems.slice(i, i + 3);
+    while (slots.length < 3) slots.push(null);
+
+    pages.push(`
+      <div class="legal-page">
+        ${slots
+          .map((slot) => {
+            const content = slot
+              ? buildCopyHTML(
+                  slot.invoice,
+                  settings,
+                  language,
+                  withPaidSeal,
+                  slot.copyLabel,
+                  "compact",
+                )
+              : "";
+
+            return `<div class="legal-slip">${content}</div>`;
+          })
+          .join("")}
+        <div class="legal-cut-line legal-cut-line-one"></div>
+        <div class="legal-cut-line legal-cut-line-two"></div>
+      </div>
+    `);
+  }
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    ${buildFontCSS()}
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #fff; }
+    .legal-page {
+      width: ${LEGAL_PAGE.width}mm;
+      height: ${LEGAL_PAGE.height}mm;
+      position: relative;
+      background: white;
+      overflow: hidden;
+    }
+    .legal-slip {
+      width: 100%;
+      height: calc(100% / 3);
+      position: relative;
+      overflow: hidden;
+    }
+    .legal-cut-line {
+      width: 100%;
+      height: 0;
+      border-top: 1px dashed #999;
+      position: absolute;
+      left: 0;
+      z-index: 2;
+    }
+    .legal-cut-line-one {
+      top: calc(100% / 3);
+    }
+    .legal-cut-line-two {
+      top: calc(100% * 2 / 3);
+    }
+    .legal-cut-line::after {
+      content: '${cutLineText}';
+      position: absolute;
+      left: 9mm;
+      top: -10px;
+      background: white;
+      padding: 2px 8px;
+      font-size: 8px;
+      color: #999;
+      font-family: 'Tiro Bangla', Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  ${pages.join("")}
+</body>
+</html>`;
+}
+
+async function createMonthlyLegalBillsPDF({
+  invoices,
+  settings,
+  config = {},
+  billMonth,
+  copyType = COPY_TYPES.CUSTOMER,
+  withPaidSeal = false,
+  autoPrint = false,
+}) {
+  if (!Array.isArray(invoices) || invoices.length === 0) {
+    throw new Error("No generated bills found for this month.");
+  }
+
+  const language = normalizePdfLanguage(config.pdfLanguage);
+  const normalizedCopyType = normalizeCopyType(copyType);
+  const fullHTML = buildLegalBatchHTML({
+    invoices,
+    settings,
+    language,
+    withPaidSeal,
+    copyType: normalizedCopyType,
+  });
+
+  const container = document.createElement("div");
+  container.innerHTML = fullHTML;
+  container.style.position = "absolute";
+  container.style.left = "-9999px";
+  container.style.width = `${LEGAL_PAGE.width}mm`;
+  document.body.appendChild(container);
+
+  await document.fonts.ready;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  try {
+    const pages = Array.from(container.querySelectorAll(".legal-page"));
+    const pdf = new jsPDF({
+      orientation: "p",
+      unit: "mm",
+      format: [LEGAL_PAGE.width, LEGAL_PAGE.height],
+    });
+
+    for (let i = 0; i < pages.length; i += 1) {
+      const canvas = await html2canvas(pages[i], {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      if (i > 0) pdf.addPage([LEGAL_PAGE.width, LEGAL_PAGE.height], "p");
+      pdf.addImage(
+        imgData,
+        "JPEG",
+        0,
+        0,
+        LEGAL_PAGE.width,
+        LEGAL_PAGE.height,
+      );
+    }
+
+    if (autoPrint && typeof pdf.autoPrint === "function") {
+      pdf.autoPrint();
+    }
+
+    document.body.removeChild(container);
+
+    const monthPart = sanitizeFilenamePart(billMonth, "selected-month");
+    const copyPart =
+      normalizedCopyType === COPY_TYPES.BOTH
+        ? "office-customer"
+        : normalizedCopyType;
+    const filename = `bills-${monthPart}-${copyPart}-legal.pdf`;
+
+    return { pdf, filename };
+  } catch (err) {
+    if (container.parentNode) document.body.removeChild(container);
+    throw err;
+  }
 }
 
 async function createInvoicePDF(
@@ -456,6 +794,33 @@ export async function viewInvoicePDF(
     withPaidSeal,
     config,
   );
+  const blob = pdf.output("blob");
+  const url = URL.createObjectURL(blob);
+
+  if (previewWindow) {
+    previewWindow.document.title = filename;
+    previewWindow.location.href = url;
+  } else {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+  return filename;
+}
+
+export async function generateMonthlyLegalBillsPDF(options) {
+  const { pdf, filename } = await createMonthlyLegalBillsPDF(options);
+  pdf.save(filename);
+  return filename;
+}
+
+export async function viewMonthlyLegalBillsPDF(options) {
+  const previewWindow = window.open("", "_blank");
+  const { pdf, filename } = await createMonthlyLegalBillsPDF(options);
   const blob = pdf.output("blob");
   const url = URL.createObjectURL(blob);
 
