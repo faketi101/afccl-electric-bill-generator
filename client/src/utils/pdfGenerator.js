@@ -170,9 +170,12 @@ function buildCopyHTML(
         titleFont: "12px",
         copyFont: "8.8px",
         detailFont: "8.7px",
+        bilingualDetailFont: "7.7px",
         detailMargin: "3px 0",
         detailRowMargin: "3px",
+        detailColumnGap: "8px",
         labelWidth: "66px",
+        bilingualLabelWidth: "100px",
         tableMargin: "3px",
         tableFont: "8.6px",
         rowPadding: "2px 8px",
@@ -211,9 +214,12 @@ function buildCopyHTML(
         titleFont: "15px",
         copyFont: "11px",
         detailFont: "11px",
+        bilingualDetailFont: "9.7px",
         detailMargin: "6px 0",
         detailRowMargin: "5px",
+        detailColumnGap: "14px",
         labelWidth: "80px",
+        bilingualLabelWidth: "126px",
         tableMargin: "6px",
         tableFont: "11px",
         rowPadding: "4px 12px",
@@ -237,6 +243,14 @@ function buildCopyHTML(
         paidSealFont: "14px",
         paidSealDateFont: "10px",
       };
+  const detailFont =
+    language === PDF_LANGUAGE.BOTH ? layout.bilingualDetailFont : layout.detailFont;
+  const detailLabelWidth =
+    language === PDF_LANGUAGE.BOTH ? layout.bilingualLabelWidth : layout.labelWidth;
+  const detailRowStyle = `display:flex;align-items:flex-start;margin-bottom:${layout.detailRowMargin};`;
+  const detailLabelStyle = `color:#000;font-weight:600;flex:0 0 ${detailLabelWidth};white-space:normal;line-height:1.22;padding-right:4px;`;
+  const detailValueStyle =
+    "color:#000;flex:1;min-width:0;line-height:1.22;overflow-wrap:anywhere;word-break:normal;";
 
   const displayName = formatDisplayValue(c.name, c.nameBn, language);
   const displayAddress = formatDisplayValue(c.address, c.addressBn, language);
@@ -356,19 +370,19 @@ function buildCopyHTML(
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;margin:${layout.detailMargin};font-size:${layout.detailFont};">
+      <div style="display:flex;justify-content:space-between;gap:${layout.detailColumnGap};margin:${layout.detailMargin};font-size:${detailFont};">
        
-        <div style="flex:1;">
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="color:#000;">${displayName}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="color:#000;">${displayAddress}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="color:#000;">${displayMeterNo}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Phone", "ফোন", language)}:</span><span style="color:#000;">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
+        <div style="flex:1;min-width:0;">
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="${detailValueStyle}">${displayName}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="${detailValueStyle}">${displayAddress}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="${detailValueStyle}">${displayMeterNo}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Phone", "ফোন", language)}:</span><span style="${detailValueStyle}">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
         </div>
-         <div style="flex:1;">
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="color:#000;">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth, language)}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="color:#000;">${formatDate(invoice.issueDate, language)}</span></div>
-          <div style="display:flex;margin-bottom:${layout.detailRowMargin};"><span style="color:#000;font-weight:600;width:${layout.labelWidth};white-space:nowrap;">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="color:#000;">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
+         <div style="flex:1;min-width:0;">
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="${detailValueStyle}">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="${detailValueStyle}">${formatBillMonth(invoice.billMonth, language)}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="${detailValueStyle}">${formatDate(invoice.issueDate, language)}</span></div>
+          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="${detailValueStyle}">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
         </div>
       </div>
 
