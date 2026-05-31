@@ -241,6 +241,7 @@ function buildStylesXml() {
 
 export function downloadFilteredInvoicesXlsx({
   filter,
+  generationFilter = "all",
   monthFilter,
   searchQuery,
   rows,
@@ -254,29 +255,38 @@ export function downloadFilteredInvoicesXlsx({
       "Meter",
       "Address",
       "Month",
+      "Bill Generated",
       "Status",
       "Paid Date",
       "Total (BDT)",
     ],
-    ...rows.map((inv) => [
-      inv.invoiceNo,
-      inv.customer?.name || "",
-      inv.customer?.meterNo || "",
-      inv.customer?.address || "",
-      inv.billMonth || "",
-      inv.status || "",
-      inv.paidAt ? new Date(inv.paidAt).toLocaleDateString() : "",
-      Number(inv.totalAmount || 0),
-    ]),
+    ...rows.map((row) => {
+      const inv = row.invoice || row;
+      const customer = row.customer || inv.customer || {};
+      const generated = row.generated ?? Boolean(inv.invoiceNo);
+
+      return [
+        inv.invoiceNo || "",
+        customer.name || "",
+        customer.meterNo || "",
+        customer.address || "",
+        row.billMonth || inv.billMonth || "",
+        generated ? "Yes" : "No",
+        generated ? inv.status || "" : "not-generated",
+        inv.paidAt ? new Date(inv.paidAt).toLocaleDateString() : "",
+        generated ? Number(inv.totalAmount || 0) : "",
+      ];
+    }),
   ];
 
   const summaryRows = [
     ["Bill Analyzer Summary"],
     [],
     ["Current Filter", filter],
+    ["Bill Generation Filter", generationFilter],
     ["Month Filter", monthFilter || "All"],
     ["Search Query", searchQuery || "All"],
-    ["Visible Invoices", rows.length],
+    ["Visible Rows", rows.length],
     ["Paid Total (BDT)", Number(totalPaid.toFixed(2))],
     ["Unpaid Total (BDT)", Number(totalUnpaid.toFixed(2))],
   ];

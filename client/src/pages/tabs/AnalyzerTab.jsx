@@ -1,17 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import api from "../../api";
-import { generateInvoicePDF } from "../../utils/pdfGenerator";
+import { generateInvoicePDF, viewInvoicePDF } from "../../utils/pdfGenerator";
 import { downloadFilteredInvoicesXlsx } from "../../utils/xlsxDownload";
-
-const supportsMonthInput = (() => {
-  const input = document.createElement("input");
-  input.setAttribute("type", "month");
-  return input.type === "month";
-})();
 
 export default function AnalyzerTab() {
   const [invoices, setInvoices] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [filter, setFilter] = useState("all"); // all | paid | unpaid
+  const [generationFilter, setGenerationFilter] = useState("all"); // all | generated | not-generated
   const [monthFilter, setMonthFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [settings, setSettings] = useState({});
@@ -19,11 +15,13 @@ export default function AnalyzerTab() {
   const [pageSize, setPageSize] = useState(50);
 
   const load = async () => {
-    const [inv, s] = await Promise.all([
+    const [inv, c, s] = await Promise.all([
       api.get("/invoices"),
+      api.get("/customers"),
       api.get("/settings"),
     ]);
     setInvoices(inv.data);
+    setCustomers(c.data);
     setSettings(s.data);
   };
 
@@ -31,26 +29,88 @@ export default function AnalyzerTab() {
     load();
   }, []);
 
+  const monthOptions = useMemo(() => {
+    return Array.from(
+      new Set(invoices.map((invoice) => invoice.billMonth).filter(Boolean)),
+    ).sort((a, b) => b.localeCompare(a));
+  }, [invoices]);
+
+  const rows = useMemo(() => {
+    if (!monthFilter) {
+      return invoices.map((invoice) => ({
+        key: invoice._id,
+        invoice,
+        customer: invoice.customer,
+        billMonth: invoice.billMonth,
+        generated: true,
+      }));
+    }
+
+    const invoicesByCustomer = new Map();
+    const orphanInvoices = [];
+
+    invoices
+      .filter((invoice) => invoice.billMonth === monthFilter)
+      .forEach((invoice) => {
+        const customerId = invoice.customer?._id;
+        if (customerId) {
+          invoicesByCustomer.set(customerId, invoice);
+        } else {
+          orphanInvoices.push(invoice);
+        }
+      });
+
+    return [
+      ...customers.map((customer) => {
+        const invoice = invoicesByCustomer.get(customer._id);
+        return {
+          key: `${monthFilter}-${customer._id}`,
+          invoice,
+          customer,
+          billMonth: monthFilter,
+          generated: Boolean(invoice),
+        };
+      }),
+      ...orphanInvoices.map((invoice) => ({
+        key: invoice._id,
+        invoice,
+        customer: invoice.customer,
+        billMonth: invoice.billMonth,
+        generated: true,
+      })),
+    ];
+  }, [customers, invoices, monthFilter]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return invoices.filter((i) => {
-      if (filter !== "all" && i.status !== filter) return false;
-      if (monthFilter && i.billMonth !== monthFilter) return false;
+    return rows.filter((row) => {
+      const invoice = row.invoice;
+      const customer = row.customer || {};
+
+      if (generationFilter === "generated" && !row.generated) return false;
+      if (generationFilter === "not-generated" && row.generated) return false;
+      if (filter !== "all" && invoice?.status !== filter) return false;
       if (q) {
         const match =
-          i.invoiceNo?.toLowerCase().includes(q) ||
-          i.customer?.name?.toLowerCase().includes(q) ||
-          i.customer?.meterNo?.toLowerCase().includes(q) ||
-          i.customer?.address?.toLowerCase().includes(q);
+          invoice?.invoiceNo?.toLowerCase().includes(q) ||
+          customer.name?.toLowerCase().includes(q) ||
+          customer.meterNo?.toLowerCase().includes(q) ||
+          customer.address?.toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
     });
-  }, [invoices, filter, monthFilter, searchQuery]);
+  }, [filter, generationFilter, rows, searchQuery]);
 
   useEffect(() => {
     setPage(1);
-  }, [filter, monthFilter, searchQuery, pageSize]);
+  }, [filter, generationFilter, monthFilter, searchQuery, pageSize]);
+
+  useEffect(() => {
+    if (!monthFilter && generationFilter === "not-generated") {
+      setGenerationFilter("all");
+    }
+  }, [generationFilter, monthFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
@@ -89,8 +149,20 @@ export default function AnalyzerTab() {
     load();
   };
 
+  const resetFilters = () => {
+    setFilter("all");
+    setGenerationFilter("all");
+    setMonthFilter("");
+    setSearchQuery("");
+    setPage(1);
+  };
+
   const handleDownload = (invoice, withSeal = false) => {
     generateInvoicePDF(invoice, settings, withSeal);
+  };
+
+  const handleView = (invoice, withSeal = false) => {
+    viewInvoicePDF(invoice, settings, withSeal);
   };
 
   const handleDelete = async (id) => {
@@ -102,6 +174,7 @@ export default function AnalyzerTab() {
   const handleDownloadXlsx = () => {
     downloadFilteredInvoicesXlsx({
       filter,
+      generationFilter,
       monthFilter,
       searchQuery,
       rows: filtered,
@@ -112,11 +185,13 @@ export default function AnalyzerTab() {
 
   // Summary stats
   const totalUnpaid = filtered
-    .filter((i) => i.status === "unpaid")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .filter((row) => row.invoice?.status === "unpaid")
+    .reduce((s, row) => s + Number(row.invoice.totalAmount || 0), 0);
   const totalPaid = filtered
-    .filter((i) => i.status === "paid")
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .filter((row) => row.invoice?.status === "paid")
+    .reduce((s, row) => s + Number(row.invoice.totalAmount || 0), 0);
+  const generatedCount = filtered.filter((row) => row.generated).length;
+  const notGeneratedCount = filtered.length - generatedCount;
 
   return (
     <div>
@@ -125,7 +200,17 @@ export default function AnalyzerTab() {
       {/* Stats cards */}
       <div className="grid-3 mb-2">
         {[
-          { label: "Total Invoices", value: filtered.length, color: "#3182ce" },
+          { label: "Visible Rows", value: filtered.length, color: "#3182ce" },
+          {
+            label: "Bill Generated",
+            value: generatedCount,
+            color: "#805ad5",
+          },
+          {
+            label: "Not Generated",
+            value: notGeneratedCount,
+            color: "#dd6b20",
+          },
           {
             label: "Paid (BDT)",
             value: `৳ ${totalPaid.toFixed(2)}`,
@@ -148,6 +233,31 @@ export default function AnalyzerTab() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "0.75rem",
+          marginBottom: "0.75rem",
+        }}
+      >
+        <button
+          type="button"
+          onClick={resetFilters}
+          className="btn"
+          style={{
+            background: "#fff",
+            color: "#1a365d",
+            border: "1px solid #90cdf4",
+            fontWeight: 700,
+          }}
+        >
+          Reset Filters
+        </button>
       </div>
 
       {/* Filter and Search */}
@@ -173,17 +283,32 @@ export default function AnalyzerTab() {
           ))}
         </div>
 
-        <input
-          type={supportsMonthInput ? "month" : "text"}
+        <select
           className="form-input"
           value={monthFilter}
           onChange={(e) => setMonthFilter(e.target.value)}
-          inputMode="numeric"
-          placeholder="YYYY-MM"
-          pattern="\\d{4}-\\d{2}"
-          title="Use YYYY-MM format"
-          style={{ maxWidth: "150px" }}
-        />
+          style={{ maxWidth: "180px" }}
+        >
+          <option value="">All months</option>
+          {monthOptions.map((month) => (
+            <option key={month} value={month}>
+              {month}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="form-input"
+          value={generationFilter}
+          onChange={(e) => setGenerationFilter(e.target.value)}
+          style={{ maxWidth: "190px" }}
+        >
+          <option value="all">All bills</option>
+          <option value="generated">Bill generated</option>
+          <option value="not-generated" disabled={!monthFilter}>
+            Bill not generated
+          </option>
+        </select>
 
         <input
           type="text"
@@ -281,85 +406,136 @@ export default function AnalyzerTab() {
             </tr>
           </thead>
           <tbody>
-            {pagedInvoices.map((inv) => (
-              <tr key={inv._id}>
+            {pagedInvoices.map((row) => {
+              const inv = row.invoice;
+              const customer = row.customer || {};
+
+              return (
+              <tr key={row.key}>
                 <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                  {inv.invoiceNo}
+                  {inv?.invoiceNo || "-"}
                 </td>
-                <td>{inv.customer?.name}</td>
+                <td>{customer.name || "-"}</td>
                 <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>
-                  {inv.customer?.meterNo}
+                  {customer.meterNo || "-"}
                 </td>
-                <td>{inv.billMonth}</td>
+                <td>{row.billMonth}</td>
                 <td style={{ fontFamily: "monospace", fontWeight: "600" }}>
-                  ৳ {inv.totalAmount?.toFixed(2)}
+                  {inv ? `৳ ${inv.totalAmount?.toFixed(2)}` : "-"}
                 </td>
                 <td>
-                  <span
-                    className={`status-badge ${inv.status === "paid" ? "status-paid" : "status-unpaid"}`}
-                  >
-                    {inv.status.toUpperCase()}
-                  </span>
+                  {inv ? (
+                    <span
+                      className={`status-badge ${inv.status === "paid" ? "status-paid" : "status-unpaid"}`}
+                    >
+                      {inv.status.toUpperCase()}
+                    </span>
+                  ) : (
+                    <span
+                      className="status-badge"
+                      style={{ background: "#fed7d7", color: "#742a2a" }}
+                    >
+                      NOT GENERATED
+                    </span>
+                  )}
                 </td>
                 <td style={{ fontSize: "0.8rem" }}>
-                  {inv.paidAt ? new Date(inv.paidAt).toLocaleDateString() : "-"}
+                  {inv?.paidAt
+                    ? new Date(inv.paidAt).toLocaleDateString()
+                    : "-"}
                 </td>
                 <td
                   style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}
                 >
-                  <button
-                    onClick={() => handleDownload(inv, false)}
-                    className="btn"
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      background: "#3182ce",
-                      color: "#fff",
-                    }}
-                  >
-                    PDF
-                  </button>
-                  {inv.status === "paid" && (
-                    <button
-                      onClick={() => handleDownload(inv, true)}
-                      className="btn"
-                      style={{
-                        padding: "0.25rem 0.5rem",
-                        fontSize: "0.75rem",
-                        background: "#2f855a",
-                        color: "#fff",
-                      }}
-                    >
-                      PAID PDF
-                    </button>
+                  {inv ? (
+                    <>
+                      <button
+                        onClick={() => handleView(inv, false)}
+                        className="btn"
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          background: "#4a5568",
+                          color: "#fff",
+                        }}
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleDownload(inv, false)}
+                        className="btn"
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          background: "#3182ce",
+                          color: "#fff",
+                        }}
+                      >
+                        PDF
+                      </button>
+                      {inv.status === "paid" && (
+                        <>
+                          <button
+                            onClick={() => handleView(inv, true)}
+                            className="btn"
+                            style={{
+                              padding: "0.25rem 0.5rem",
+                              fontSize: "0.75rem",
+                              background: "#276749",
+                              color: "#fff",
+                            }}
+                          >
+                            Paid View
+                          </button>
+                          <button
+                            onClick={() => handleDownload(inv, true)}
+                            className="btn"
+                            style={{
+                              padding: "0.25rem 0.5rem",
+                              fontSize: "0.75rem",
+                              background: "#2f855a",
+                              color: "#fff",
+                            }}
+                          >
+                            PAID PDF
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => toggleStatus(inv)}
+                        className="btn"
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          background:
+                            inv.status === "paid" ? "#d69e2e" : "#38a169",
+                          color: "#fff",
+                        }}
+                      >
+                        {inv.status === "paid" ? "Unpaid" : "Mark Paid"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(inv._id)}
+                        className="btn"
+                        style={{
+                          padding: "0.25rem 0.5rem",
+                          fontSize: "0.75rem",
+                          background: "#e53e3e",
+                          color: "#fff",
+                        }}
+                      >
+                        Del
+                      </button>
+                    </>
+                  ) : (
+                    <span style={{ color: "#a0aec0", fontSize: "0.8rem" }}>
+                      No invoice
+                    </span>
                   )}
-                  <button
-                    onClick={() => toggleStatus(inv)}
-                    className="btn"
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      background: inv.status === "paid" ? "#d69e2e" : "#38a169",
-                      color: "#fff",
-                    }}
-                  >
-                    {inv.status === "paid" ? "Unpaid" : "Mark Paid"}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(inv._id)}
-                    className="btn"
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      fontSize: "0.75rem",
-                      background: "#e53e3e",
-                      color: "#fff",
-                    }}
-                  >
-                    Del
-                  </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td
