@@ -11,18 +11,21 @@ export default function AnalyzerTab() {
   const [monthFilter, setMonthFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [settings, setSettings] = useState({});
+  const [config, setConfig] = useState({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
   const load = async () => {
-    const [inv, c, s] = await Promise.all([
+    const [inv, c, s, cf] = await Promise.all([
       api.get("/invoices"),
       api.get("/customers"),
       api.get("/settings"),
+      api.get("/config"),
     ]);
     setInvoices(inv.data);
     setCustomers(c.data);
     setSettings(s.data);
+    setConfig(cf.data);
   };
 
   useEffect(() => {
@@ -158,11 +161,11 @@ export default function AnalyzerTab() {
   };
 
   const handleDownload = (invoice, withSeal = false) => {
-    generateInvoicePDF(invoice, settings, withSeal);
+    generateInvoicePDF(invoice, settings, withSeal, config);
   };
 
   const handleView = (invoice, withSeal = false) => {
-    viewInvoicePDF(invoice, settings, withSeal);
+    viewInvoicePDF(invoice, settings, withSeal, config);
   };
 
   const handleDelete = async (id) => {

@@ -71,7 +71,7 @@ export default function GenerateTab() {
       setMsgType("success");
 
       // Auto-download PDF
-      generateInvoicePDF(res.data, settings);
+      generateInvoicePDF(res.data, settings, false, config);
 
       setForm({
         customerId: "",

@@ -5,6 +5,11 @@ const configSchema = new mongoose.Schema({
   ratePerUnit:  { type: Number, required: true, default: 8.0 }, // BDT per kWh
   serviceCharge:{ type: Number, default: 0 },
   vatPercent:   { type: Number, default: 0 },
+  pdfLanguage:  {
+    type: String,
+    enum: ['bangla', 'english', 'bangla_english'],
+    default: 'bangla_english',
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Config', configSchema);

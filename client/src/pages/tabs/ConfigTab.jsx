@@ -6,6 +6,7 @@ export default function ConfigTab() {
     ratePerUnit: 8,
     serviceCharge: 0,
     vatPercent: 0,
+    pdfLanguage: "bangla_english",
   });
   const [previewUnits, setPreviewUnits] = useState(100);
   const [msg, setMsg] = useState("");
@@ -86,6 +87,21 @@ export default function ConfigTab() {
                 setConfig({ ...config, vatPercent: parseFloat(e.target.value) })
               }
             />
+          </label>
+
+          <label className="form-label">
+            PDF Language
+            <select
+              className="form-input"
+              value={config.pdfLanguage || "bangla_english"}
+              onChange={(e) =>
+                setConfig({ ...config, pdfLanguage: e.target.value })
+              }
+            >
+              <option value="bangla">Bangla</option>
+              <option value="english">English</option>
+              <option value="bangla_english">Bangla and English</option>
+            </select>
           </label>
 
           <button type="submit" className="btn btn-primary">

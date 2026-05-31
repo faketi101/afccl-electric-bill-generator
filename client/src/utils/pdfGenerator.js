@@ -3,6 +3,17 @@ import jsPDF from "jspdf";
 import { formatAmountInWords } from "./amountInWords";
 
 const bnDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+const PDF_LANGUAGE = {
+  BANGLA: "bangla",
+  ENGLISH: "english",
+  BOTH: "bangla_english",
+};
+
+function normalizePdfLanguage(language) {
+  if (language === "bangla") return PDF_LANGUAGE.BANGLA;
+  if (language === "english") return PDF_LANGUAGE.ENGLISH;
+  return PDF_LANGUAGE.BOTH;
+}
 
 function toBnNum(n) {
   return String(n)
@@ -24,17 +35,40 @@ function bn(text) {
   );
 }
 
-function formatNumber(n) {
+function formatLabel(en, bnVal, language) {
+  if (language === PDF_LANGUAGE.BANGLA) return bn(bnVal || en);
+  if (language === PDF_LANGUAGE.ENGLISH) return en;
+  return `${en} (${bn(bnVal)})`;
+}
+
+function formatCopyLabel(en, bnVal, language) {
+  if (language === PDF_LANGUAGE.BANGLA) return bn(bnVal);
+  if (language === PDF_LANGUAGE.ENGLISH) return en;
+  return `${bn(bnVal)} (${en})`;
+}
+
+function formatDisplayValue(en, bnVal, language) {
+  if (language === PDF_LANGUAGE.BANGLA) return bn(bnVal || en || "");
+  if (language === PDF_LANGUAGE.ENGLISH) return en || bnVal || "";
+  if (bnVal) return `${en} (${bn(bnVal)})`;
+  return en || "";
+}
+
+function formatNumber(n, language) {
+  if (language === PDF_LANGUAGE.BANGLA) return bn(toBnNum(n));
+  if (language === PDF_LANGUAGE.ENGLISH) return String(n);
   return `${n} (${bn(toBnNum(n))})`;
 }
 
-function formatCurrency(amount) {
+function formatCurrency(amount, language) {
   const en = amount.toFixed(2);
   const bnStr = bn(toBnNum(en));
+  if (language === PDF_LANGUAGE.BANGLA) return `৳ ${bnStr}`;
+  if (language === PDF_LANGUAGE.ENGLISH) return `৳ ${en}`;
   return `৳ ${en} (${bnStr})`;
 }
 
-function formatDate(date) {
+function formatDate(date, language) {
   const d = new Date(date);
   const enDay = d.getDate();
   const enMonth = d.getMonth() + 1;
@@ -42,36 +76,91 @@ function formatDate(date) {
   const bnDay = toBnNum(enDay);
   const bnMonth = toBnNum(enMonth);
   const bnYear = toBnNum(enYear);
+  if (language === PDF_LANGUAGE.BANGLA) {
+    return bn(`${bnDay}/${bnMonth}/${bnYear}`);
+  }
+  if (language === PDF_LANGUAGE.ENGLISH) {
+    return `${enDay}/${enMonth}/${enYear}`;
+  }
   return `${enDay}/${enMonth}/${enYear} (${bn(`${bnDay}/${bnMonth}/${bnYear}`)})`;
 }
 
-function formatBillMonth(bm) {
+function formatBillMonth(bm, language) {
   if (!bm) return "";
   const parts = bm.split("-");
   if (parts.length === 2) {
+    if (language === PDF_LANGUAGE.BANGLA) {
+      return bn(`${toBnNum(parts[0])}-${toBnNum(parts[1])}`);
+    }
+    if (language === PDF_LANGUAGE.ENGLISH) {
+      return bm;
+    }
     return `${bm} (${bn(`${toBnNum(parts[0])}-${toBnNum(parts[1])}`)})`;
   }
   return bm;
 }
 
-function getDisplayValue(en, bnVal) {
-  if (bnVal) return `${en} (${bn(bnVal)})`;
-  return en;
+function formatKwh(language) {
+  return language === PDF_LANGUAGE.BANGLA ? bn("কিলোওয়াট ঘণ্টা") : "kWh";
+}
+
+function formatAmountWords(amount, language) {
+  const amountWords = formatAmountInWords(amount);
+  if (language === PDF_LANGUAGE.BANGLA) {
+    return `
+          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+            <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
+          </div>
+        `;
+  }
+  if (language === PDF_LANGUAGE.ENGLISH) {
+    return `
+          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+            <div><strong>In words:</strong> ${amountWords.english}</div>
+          </div>
+        `;
+  }
+
+  return `
+          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
+            <div><strong>In words:</strong> ${amountWords.english}</div>
+            <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
+          </div>
+        `;
 }
 
 function buildCopyHTML(
   invoice,
   settings,
+  language,
   withPaidSeal,
   copyLabel,
 ) {
   const c = invoice.customer || {};
   const s = settings || {};
 
-  const displayName = getDisplayValue(c.name, c.nameBn);
-  const displayAddress = getDisplayValue(c.address, c.addressBn);
-  const displayMeterNo = getDisplayValue(c.meterNo, c.meterNoBn);
-  const displayPhone = getDisplayValue(c.phone || "", c.phoneBn);
+  const displayName = formatDisplayValue(c.name, c.nameBn, language);
+  const displayAddress = formatDisplayValue(c.address, c.addressBn, language);
+  const displayMeterNo = formatDisplayValue(c.meterNo, c.meterNoBn, language);
+  const displayPhone = formatDisplayValue(c.phone || "", c.phoneBn, language);
+  const kwh = formatKwh(language);
+  const headerAddressLabel = formatLabel("Address", "ঠিকানা", language);
+  const headerPhoneLabel = formatLabel("Phone", "ফোন", language);
+  const headerEmailLabel = formatLabel("Email", "ইমেইল", language);
+  const companyName = bn(
+    s.companyName ||
+      (language === PDF_LANGUAGE.BANGLA ? "কোম্পানির নাম" : "Company Name"),
+  );
+  const companyAddress = bn(s.companyAddress || "");
+  const companyPhone = bn(s.companyPhone || "");
+  const companyEmail = bn(s.companyEmail || "");
+  const footerText = bn(s.footerText || "");
+  const invoiceTitle =
+    language === PDF_LANGUAGE.BANGLA
+      ? bn("বিদ্যুৎ বিল")
+      : bn(s.invoiceTitle || "ELECTRICITY BILL");
+  const paidLabel = formatLabel("PAID", "পরিশোধিত", language);
+  const paidDate = invoice.paidAt ? formatDate(invoice.paidAt, language) : "";
 
   const logoHTML = s.logoBase64
     ? `<img src="data:${s.logoMimeType || "image/png"};base64,${s.logoBase64}" style="width:55px;height:40px;object-fit:contain;">`
@@ -79,39 +168,39 @@ function buildCopyHTML(
 
   const paidSealHTML =
     withPaidSeal && invoice.status === "paid"
-      ? `<div style="position:absolute;top:25mm;right:15mm;width:85px;height:40px;border:3px solid #22c55e;color:#22c55e;transform:rotate(-15deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:14px;font-weight:bold;"><span>PAID</span><span style="font-size:10px;font-weight:normal;">${invoice.paidAt ? new Date(invoice.paidAt).toLocaleDateString("en-GB").split("/").join("/") : ""}</span></div>`
+      ? `<div style="position:absolute;top:25mm;right:15mm;width:85px;height:40px;border:3px solid #22c55e;color:#22c55e;transform:rotate(-15deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:14px;font-weight:bold;"><span>${paidLabel}</span><span style="font-size:10px;font-weight:normal;">${paidDate}</span></div>`
       : "";
 
   const rows = [
     {
       label: "Previous Reading",
       bnLabel: "পূর্ববর্তী রিডিং",
-      value: `${formatNumber(invoice.previousReading)} kWh`,
+      value: `${formatNumber(invoice.previousReading, language)} ${kwh}`,
     },
     {
       label: "Current Reading",
       bnLabel: "বর্তমান রিডিং",
-      value: `${formatNumber(invoice.currentReading)} kWh`,
+      value: `${formatNumber(invoice.currentReading, language)} ${kwh}`,
     },
     {
       label: "Units Consumed",
       bnLabel: "ভোক্ত ইউনিট",
-      value: `${formatNumber(invoice.unitsConsumed)} kWh`,
+      value: `${formatNumber(invoice.unitsConsumed, language)} ${kwh}`,
     },
     {
       label: "Rate per Unit",
       bnLabel: "প্রতি ইউনিট হার",
-      value: formatCurrency(invoice.ratePerUnit),
+      value: formatCurrency(invoice.ratePerUnit, language),
     },
     {
       label: "Unit Charge",
       bnLabel: "ইউনিট চার্জ",
-      value: formatCurrency(invoice.unitCharge),
+      value: formatCurrency(invoice.unitCharge, language),
     },
     {
       label: "Service Charge",
       bnLabel: "সার্ভিস চার্জ",
-      value: formatCurrency(invoice.serviceCharge || 0),
+      value: formatCurrency(invoice.serviceCharge || 0, language),
     },
   ];
 
@@ -123,14 +212,15 @@ function buildCopyHTML(
     rows.push({
       label: fineLabel,
       bnLabel: fineLabelBn,
-      value: formatCurrency(invoice.fine),
+      value: formatCurrency(invoice.fine, language),
     });
   }
   if (invoice.vatPercent > 0) {
+    const vatPercentBn = toBnNum(invoice.vatPercent);
     rows.push({
       label: `VAT (${invoice.vatPercent}%)`,
-      bnLabel: `ভ্যাট (${invoice.vatPercent}%)`,
-      value: formatCurrency(invoice.vatAmount),
+      bnLabel: `ভ্যাট (${vatPercentBn}%)`,
+      value: formatCurrency(invoice.vatAmount, language),
     });
   }
 
@@ -138,20 +228,14 @@ function buildCopyHTML(
     .map(
       (r) => `
     <tr>
-      <td style="padding:4px 12px;border:1px solid #ddd;font-size:11px;">${r.label} (${bn(r.bnLabel)})</td>
+      <td style="padding:4px 12px;border:1px solid #ddd;font-size:11px;">${formatLabel(r.label, r.bnLabel, language)}</td>
       <td style="padding:4px 12px;border:1px solid #ddd;text-align:right;font-size:11px;font-family:monospace;">${r.value}</td>
     </tr>
   `,
     )
     .join("");
 
-  const amountWords = formatAmountInWords(invoice.totalAmount);
-  const totalAmountWordsHTML = `
-          <div style="border:1px solid #ddd;border-top:0;padding:6px 12px;font-size:9.5px;line-height:1.35;color:#1a202c;background:#fff;">
-            <div><strong>In words:</strong> ${amountWords.english}</div>
-            <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
-          </div>
-        `;
+  const totalAmountWordsHTML = formatAmountWords(invoice.totalAmount, language);
 
   return `
     <div style="position:relative;padding:12.7mm 15mm;height:100%;">
@@ -159,53 +243,51 @@ function buildCopyHTML(
       <div style="display:flex;gap:12px;margin-bottom:10px;padding-bottom:10px;border-bottom:2px solid #1e3c78;">
         <div style="width:60px;flex-shrink:0;">${logoHTML}</div>
         <div style="flex:1;">
-          <div style="font-size:17px;font-weight:700;color:#1e3c78;margin-bottom:3px;">${s.companyName || "Company Name"}</div>
-          <div style="font-size:11px;color:#000;line-height:1.4;">Address: ${s.companyAddress || ""}</div>
-          <div style="font-size:10px;color:#000;margin-top:2px;">Phone: ${s.companyPhone || ""}, Email: ${s.companyEmail || ""}</div>
+          <div style="font-size:17px;font-weight:700;color:#1e3c78;margin-bottom:3px;">${companyName}</div>
+          <div style="font-size:11px;color:#000;line-height:1.4;">${headerAddressLabel}: ${companyAddress}</div>
+          <div style="font-size:10px;color:#000;margin-top:2px;">${headerPhoneLabel}: ${companyPhone}, ${headerEmailLabel}: ${companyEmail}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:15px;font-weight:700;color:#1e3c78;">${s.invoiceTitle || "ELECTRICITY BILL"}</div>
-          <div style="font-size:11px;color:#000;margin-top:3px;">${bn(copyLabel)}</div>
+          <div style="font-size:15px;font-weight:700;color:#1e3c78;">${invoiceTitle}</div>
+          <div style="font-size:11px;color:#000;margin-top:3px;">${copyLabel}</div>
         </div>
       </div>
 
       <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:11px;">
        
         <div style="flex:1;">
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Customer:</span><span style="color:#000;">${displayName}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Address:</span><span style="color:#000;">${displayAddress}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Meter No:</span><span style="color:#000;">${displayMeterNo}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Phone:</span><span style="color:#000;">${displayPhone || "N/A"}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="color:#000;">${displayName}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="color:#000;">${displayAddress}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="color:#000;">${displayMeterNo}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Phone", "ফোন", language)}:</span><span style="color:#000;">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
         </div>
          <div style="flex:1;">
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Invoice No:</span><span style="color:#000;">${invoice.invoiceNo}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Bill Month:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth)}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Issue Date:</span><span style="color:#000;">${formatDate(invoice.issueDate)}</span></div>
-          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">Due Date:</span><span style="color:#000;">${invoice.dueDate ? formatDate(invoice.dueDate) : "N/A"}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="color:#000;">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="color:#000;">${formatBillMonth(invoice.billMonth, language)}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="color:#000;">${formatDate(invoice.issueDate, language)}</span></div>
+          <div style="display:flex;margin-bottom:5px;"><span style="color:#000;font-weight:600;width:80px;white-space:nowrap;">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="color:#000;">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
         </div>
       </div>
 
       <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:11px;">
         <thead>
-          <tr><th style="background:#1e3c78;color:white;padding:6px 12px;text-align:left;font-weight:600;">Description (${bn("বিবরণ")})</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">Amount (${bn("পরিমাণ")})</th></tr>
+          <tr><th style="background:#1e3c78;color:white;padding:6px 12px;text-align:left;font-weight:600;">${formatLabel("Description", "বিবরণ", language)}</th><th style="background:#1e3c78;color:white;padding:10px 12px;text-align:right;font-weight:600;">${formatLabel("Amount", "পরিমাণ", language)}</th></tr>
         </thead>
         <tbody>${rowsHTML}</tbody>
         <tfoot>
-          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;font-size:12px;">TOTAL PAYABLE (${bn("মোট প্রদেয়")})</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount)}</td></tr>
+          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;font-size:12px;">${formatLabel("TOTAL PAYABLE", "মোট প্রদেয়", language)}</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:8px 12px;text-align:right;font-size:12px;">${formatCurrency(invoice.totalAmount, language)}</td></tr>
         </tfoot>
       </table>
       ${totalAmountWordsHTML}
 
       <div style="position:absolute;bottom:6mm;left:15mm;right:15mm;display:flex;justify-content:space-between;align-items:flex-end;">
         <div style="font-size:10px;color:#666;font-style:italic;max-width:55%;line-height:1.3;">
-          ${s.footerText || ""}
+          ${footerText}
         </div>
         <div style="text-align:center;display:flex;flex-direction:column;align-items:center;margin-top:40px">
           <div style="height:90px;"></div>
           <div style="border-top:1.5px solid #000;width:210px;padding-top:2px;font-size:12px;font-weight:bold;line-height:1;font-family:Arial, sans-serif;color:#000;">
-            Authorised Signature & Seal
-            <br/>
-            <span style="font-size:10px;font-family:'Tiro Bangla', serif;font-weight:bold;color:#000;">${bn("সংশ্লিষ্ট কর্মকর্তার স্বাক্ষর ও সিল")}</span>
+            ${formatLabel("Authorised Signature & Seal", "সংশ্লিষ্ট কর্মকর্তার স্বাক্ষর ও সিল", language)}
           </div>
         </div>
         
@@ -218,21 +300,31 @@ async function createInvoicePDF(
   invoice,
   settings,
   withPaidSeal = false,
+  config = {},
 ) {
   const c = invoice.customer || {};
+  const language = normalizePdfLanguage(config.pdfLanguage);
 
   const officeCopyHTML = buildCopyHTML(
     invoice,
     settings,
+    language,
     withPaidSeal,
-    "অফিস কপি (Office Copy)",
+    formatCopyLabel("Office Copy", "অফিস কপি", language),
   );
   const customerCopyHTML = buildCopyHTML(
     invoice,
     settings,
+    language,
     withPaidSeal,
-    "গ্রাহক কপি (Customer Copy)",
+    formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
   );
+  const cutLineText =
+    language === PDF_LANGUAGE.BANGLA
+      ? "✂ এখানে কাটুন"
+      : language === PDF_LANGUAGE.ENGLISH
+        ? "✂ Cut here"
+        : "✂ এখানে কাটুন (Cut here)";
 
   const fullHTML = `
 <!DOCTYPE html>
@@ -277,7 +369,7 @@ async function createInvoicePDF(
       position: relative;
     }
     .cut-line::after {
-      content: '✂ ${bn("এখানে কাটুন")} (Cut here)';
+      content: '${cutLineText}';
       position: absolute;
       left: 15mm;
       top: -10px;
@@ -285,6 +377,7 @@ async function createInvoicePDF(
       padding: 2px 8px;
       font-size: 9px;
       color: #999;
+      font-family: 'Tiro Bangla', Arial, sans-serif;
     }
   </style>
 </head>
@@ -338,11 +431,13 @@ export async function generateInvoicePDF(
   invoice,
   settings,
   withPaidSeal = false,
+  config = {},
 ) {
   const { pdf, filename } = await createInvoicePDF(
     invoice,
     settings,
     withPaidSeal,
+    config,
   );
   pdf.save(filename);
   return filename;
@@ -352,12 +447,14 @@ export async function viewInvoicePDF(
   invoice,
   settings,
   withPaidSeal = false,
+  config = {},
 ) {
   const previewWindow = window.open("", "_blank");
   const { pdf, filename } = await createInvoicePDF(
     invoice,
     settings,
     withPaidSeal,
+    config,
   );
   const blob = pdf.output("blob");
   const url = URL.createObjectURL(blob);
