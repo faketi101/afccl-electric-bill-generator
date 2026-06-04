@@ -59,8 +59,17 @@ function formatCopyLabel(en, bnVal, language) {
 function formatDisplayValue(en, bnVal, language) {
   if (language === PDF_LANGUAGE.BANGLA) return bn(bnVal || en || "");
   if (language === PDF_LANGUAGE.ENGLISH) return en || bnVal || "";
-  if (bnVal) return `${en} (${bn(bnVal)})`;
+  if (bnVal && en) return `${en} (${bn(bnVal)})`;
+  if (bnVal) return bn(bnVal);
   return en || "";
+}
+
+function formatSerialNoText(serialNo, language) {
+  if (!serialNo) return "";
+  const cleanSerial = String(serialNo).trim().replace(/^inv[\s\/_-]*/i, "");
+  const label = formatLabel("Serial No", "সিরিয়াল নং", language);
+  const value = formatDisplayValue(cleanSerial, toBnNum(cleanSerial), language);
+  return `${label}: ${value}`;
 }
 
 function formatNumber(n, language) {
@@ -96,51 +105,76 @@ function formatDate(date, language) {
 
 function formatBillMonth(bm, language) {
   if (!bm) return "";
-  const parts = bm.split("-");
-  if (parts.length === 2) {
-    if (language === PDF_LANGUAGE.BANGLA) {
-      return bn(`${toBnNum(parts[0])}-${toBnNum(parts[1])}`);
+  const trimmed = String(bm).trim();
+  const enMonths = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const bnMonths = [
+    "জানুয়ারি",
+    "ফেব্রুয়ারি",
+    "মার্চ",
+    "এপ্রিল",
+    "মে",
+    "জুন",
+    "জুলাই",
+    "আগস্ট",
+    "সেপ্টেম্বর",
+    "অক্টোবর",
+    "নভেম্বর",
+    "ডিসেম্বর",
+  ];
+  const monthNameToIndex = enMonths.reduce((acc, name, index) => {
+    acc[name.toLowerCase()] = index;
+    return acc;
+  }, {});
+
+  let monthIndex = null;
+  let year = "";
+  const numericMatch = trimmed.match(/^(\d{4})-(\d{2})$/);
+  if (numericMatch) {
+    year = numericMatch[1];
+    monthIndex = Number(numericMatch[2]) - 1;
+  } else {
+    const nameMatch = trimmed.match(/^([A-Za-z]+)[\s/-]+(\d{4})$/);
+    if (nameMatch) {
+      year = nameMatch[2];
+      monthIndex = monthNameToIndex[nameMatch[1].toLowerCase()];
     }
-    if (language === PDF_LANGUAGE.ENGLISH) {
-      return bm;
-    }
-    return `${bm} (${bn(`${toBnNum(parts[0])}-${toBnNum(parts[1])}`)})`;
   }
-  return bm;
+
+  if (monthIndex !== null && monthIndex >= 0 && monthIndex < 12) {
+    const enDisplay = `${enMonths[monthIndex]}-${year}`;
+    const bnDisplay = `${bnMonths[monthIndex]}-${toBnNum(year)}`;
+    if (language === PDF_LANGUAGE.BANGLA) return bn(bnDisplay);
+    if (language === PDF_LANGUAGE.ENGLISH) return enDisplay;
+    return `${enDisplay} (${bn(bnDisplay)})`;
+  }
+
+  if (language === PDF_LANGUAGE.BANGLA) return bn(toBnNum(trimmed));
+  if (language === PDF_LANGUAGE.ENGLISH) return trimmed;
+  return `${trimmed} (${bn(toBnNum(trimmed))})`;
 }
 
 function formatKwh(language) {
   return language === PDF_LANGUAGE.BANGLA ? bn("কিলোওয়াট ঘণ্টা") : "kWh";
 }
 
-function formatAmountWords(amount, language, compact = false) {
+function formatAmountWordsInline(amount, language) {
   const amountWords = formatAmountInWords(amount);
-  const padding = compact ? "3px 8px" : "6px 12px";
-  const fontSize = compact ? "7.8px" : "9.5px";
-  const lineHeight = compact ? "1.22" : "1.35";
-  const boxStyle = `border:1px solid #ddd;border-top:0;padding:${padding};font-size:${fontSize};line-height:${lineHeight};color:#1a202c;background:#fff;`;
-
-  if (language === PDF_LANGUAGE.BANGLA) {
-    return `
-          <div style="${boxStyle}">
-            <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
-          </div>
-        `;
-  }
-  if (language === PDF_LANGUAGE.ENGLISH) {
-    return `
-          <div style="${boxStyle}">
-            <div><strong>In words:</strong> ${amountWords.english}</div>
-          </div>
-        `;
-  }
-
-  return `
-          <div style="${boxStyle}">
-            <div><strong>In words:</strong> ${amountWords.english}</div>
-            <div><strong>${bn("কথায়")}:</strong> ${bn(amountWords.bangla)}</div>
-          </div>
-        `;
+  if (language === PDF_LANGUAGE.BANGLA) return bn(amountWords.bangla);
+  if (language === PDF_LANGUAGE.ENGLISH) return amountWords.english;
+  return `${amountWords.english} (${bn(amountWords.bangla)})`;
 }
 
 function buildCopyHTML(
@@ -150,114 +184,82 @@ function buildCopyHTML(
   withPaidSeal,
   copyLabel,
   layoutMode = "standard",
+  serialNoText = "",
 ) {
   const c = invoice.customer || {};
   const s = settings || {};
   const compact = layoutMode === "compact";
   const layout = compact
     ? {
-        padding: "6mm 9mm",
-        headerGap: "8px",
-        headerMarginBottom: "5px",
-        headerPaddingBottom: "5px",
-        logoSlotWidth: "48px",
-        logoWidth: "44px",
+        padding: "6mm 8mm",
+        headerGap: "6px",
+        headerMarginBottom: "4px",
+        headerPaddingBottom: "4px",
+        logoSlotWidth: "42px",
+        logoWidth: "36px",
         logoHeight: "30px",
-        companyFont: "14px",
-        addressFont: "8.8px",
-        addressLineHeight: "1.25",
-        contactFont: "8.3px",
-        titleFont: "12px",
-        copyFont: "8.8px",
-        detailFont: "8.7px",
-        bilingualDetailFont: "7.7px",
-        detailMargin: "3px 0",
-        detailRowMargin: "3px",
-        detailColumnGap: "8px",
-        labelWidth: "66px",
-        bilingualLabelWidth: "100px",
-        tableMargin: "3px",
-        tableFont: "8.6px",
-        rowPadding: "2px 8px",
-        headerPaddingLeft: "4px 8px",
-        headerPaddingRight: "5px 8px",
-        totalPadding: "4px 8px",
-        totalFont: "9.2px",
-        footerBottom: "3.5mm",
-        footerSide: "9mm",
+        companyFont: "12.8px",
+        companyMetaFont: "8.2px",
+        companyMetaLineHeight: "1.2",
+        titleFont: "11.6px",
+        copyFont: "8.4px",
+        infoFont: "8.2px",
+        infoGap: "6px",
+        tableFont: "8.4px",
+        rowPadding: "2px 6px",
         footerFont: "7.6px",
-        footerLineHeight: "1.2",
-        signatureSpacer: "34px",
-        signatureWidth: "150px",
-        signatureFont: "8.2px",
-        signatureMarginTop: "14px",
-        paidSealTop: "15mm",
-        paidSealRight: "9mm",
-        paidSealWidth: "66px",
-        paidSealHeight: "30px",
+        footerMarginTop: "3px",
+        signatureSpacer: "24px",
+        signatureWidth: "120px",
+        signatureFont: "7.6px",
+        paidSealTop: "12mm",
+        paidSealRight: "8mm",
+        paidSealWidth: "60px",
+        paidSealHeight: "28px",
         paidSealBorder: "2px",
-        paidSealFont: "10px",
-        paidSealDateFont: "7.5px",
+        paidSealFont: "9px",
+        paidSealDateFont: "7px",
       }
     : {
-        padding: "12.7mm 15mm",
-        headerGap: "12px",
-        headerMarginBottom: "10px",
-        headerPaddingBottom: "10px",
+        padding: "12mm 14mm",
+        headerGap: "10px",
+        headerMarginBottom: "8px",
+        headerPaddingBottom: "6px",
         logoSlotWidth: "60px",
-        logoWidth: "55px",
+        logoWidth: "52px",
         logoHeight: "40px",
-        companyFont: "17px",
-        addressFont: "11px",
-        addressLineHeight: "1.4",
-        contactFont: "10px",
+        companyFont: "16px",
+        companyMetaFont: "9.6px",
+        companyMetaLineHeight: "1.25",
         titleFont: "15px",
-        copyFont: "11px",
-        detailFont: "11px",
-        bilingualDetailFont: "9.7px",
-        detailMargin: "6px 0",
-        detailRowMargin: "5px",
-        detailColumnGap: "14px",
-        labelWidth: "80px",
-        bilingualLabelWidth: "126px",
-        tableMargin: "6px",
-        tableFont: "11px",
-        rowPadding: "4px 12px",
-        headerPaddingLeft: "6px 12px",
-        headerPaddingRight: "10px 12px",
-        totalPadding: "8px 12px",
-        totalFont: "12px",
-        footerBottom: "6mm",
-        footerSide: "15mm",
-        footerFont: "10px",
-        footerLineHeight: "1.3",
-        signatureSpacer: "90px",
-        signatureWidth: "210px",
-        signatureFont: "12px",
-        signatureMarginTop: "40px",
-        paidSealTop: "25mm",
-        paidSealRight: "15mm",
-        paidSealWidth: "85px",
-        paidSealHeight: "40px",
+        copyFont: "10.5px",
+        infoFont: "9.8px",
+        infoGap: "10px",
+        tableFont: "10.4px",
+        rowPadding: "4px 8px",
+        footerFont: "9.6px",
+        footerMarginTop: "6px",
+        signatureSpacer: "60px",
+        signatureWidth: "190px",
+        signatureFont: "9.6px",
+        paidSealTop: "22mm",
+        paidSealRight: "14mm",
+        paidSealWidth: "82px",
+        paidSealHeight: "38px",
         paidSealBorder: "3px",
-        paidSealFont: "14px",
-        paidSealDateFont: "10px",
+        paidSealFont: "13px",
+        paidSealDateFont: "9px",
       };
-  const detailFont =
-    language === PDF_LANGUAGE.BOTH ? layout.bilingualDetailFont : layout.detailFont;
-  const detailLabelWidth =
-    language === PDF_LANGUAGE.BOTH ? layout.bilingualLabelWidth : layout.labelWidth;
-  const detailRowStyle = `display:flex;align-items:flex-start;margin-bottom:${layout.detailRowMargin};`;
-  const detailLabelStyle = `color:#000;font-weight:600;flex:0 0 ${detailLabelWidth};white-space:normal;line-height:1.22;padding-right:4px;`;
-  const detailValueStyle =
-    "color:#000;flex:1;min-width:0;line-height:1.22;overflow-wrap:anywhere;word-break:normal;";
 
-  const displayName = formatDisplayValue(c.name, c.nameBn, language);
-  const displayAddress = formatDisplayValue(c.address, c.addressBn, language);
-  const displayMeterNo = formatDisplayValue(c.meterNo, c.meterNoBn, language);
-  const displayPhone = formatDisplayValue(c.phone || "", c.phoneBn, language);
-  const kwh = formatKwh(language);
-  const headerAddressLabel = formatLabel("Address", "ঠিকানা", language);
+  const emptyValue = formatDisplayValue("N/A", "প্রযোজ্য নয়", language);
+  const displayName =
+    formatDisplayValue(c.name, c.nameBn, language) || emptyValue;
+  const displayShopNo =
+    formatDisplayValue(c.address, c.addressBn, language) || emptyValue;
+  const displayMeterNo =
+    formatDisplayValue(c.meterNo, c.meterNoBn, language) || emptyValue;
+  const displayBillMonth = formatBillMonth(invoice.billMonth, language) || emptyValue;
+
   const headerPhoneLabel = formatLabel("Phone", "ফোন", language);
   const headerEmailLabel = formatLabel("Email", "ইমেইল", language);
   const companyName = bn(
@@ -268,12 +270,20 @@ function buildCopyHTML(
   const companyPhone = bn(s.companyPhone || "");
   const companyEmail = bn(s.companyEmail || "");
   const footerText = bn(s.footerText || "");
-  const invoiceTitle =
-    language === PDF_LANGUAGE.BANGLA
-      ? bn("বিদ্যুৎ বিল")
-      : bn(s.invoiceTitle || "ELECTRICITY BILL");
+  const invoiceTitle = formatLabel(
+    s.invoiceTitle || "ELECTRICITY BILL",
+    "বিদ্যুৎ বিল",
+    language,
+  );
   const paidLabel = formatLabel("PAID", "পরিশোধিত", language);
   const paidDate = invoice.paidAt ? formatDate(invoice.paidAt, language) : "";
+
+  const contactLine = [
+    companyPhone ? `${headerPhoneLabel}: ${companyPhone}` : "",
+    companyEmail ? `${headerEmailLabel}: ${companyEmail}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const logoHTML = s.logoBase64
     ? `<img src="data:${s.logoMimeType || "image/png"};base64,${s.logoBase64}" style="width:${layout.logoWidth};height:${layout.logoHeight};object-fit:contain;">`
@@ -281,135 +291,182 @@ function buildCopyHTML(
 
   const paidSealHTML =
     withPaidSeal && invoice.status === "paid"
-      ? `<div style="position:absolute;top:${layout.paidSealTop};right:${layout.paidSealRight};width:${layout.paidSealWidth};height:${layout.paidSealHeight};border:${layout.paidSealBorder} solid #22c55e;color:#22c55e;transform:rotate(-15deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:${layout.paidSealFont};font-weight:bold;"><span>${paidLabel}</span><span style="font-size:${layout.paidSealDateFont};font-weight:normal;">${paidDate}</span></div>`
+      ? `<div style="position:absolute;top:${layout.paidSealTop};right:${layout.paidSealRight};width:${layout.paidSealWidth};height:${layout.paidSealHeight};border:${layout.paidSealBorder} solid #22c55e;color:#22c55e;transform:rotate(-12deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:${layout.paidSealFont};font-weight:bold;"><span>${paidLabel}</span><span style="font-size:${layout.paidSealDateFont};font-weight:normal;">${paidDate}</span></div>`
       : "";
 
-  const rows = [
+  const unitCharge = Number(invoice.unitCharge || 0);
+  const vatAmount = Number(invoice.vatAmount || 0);
+  const fineAmount = Number(invoice.fine || 0);
+  const totalAmount = Number(invoice.totalAmount || 0);
+  const monthlyTotal = Math.max(totalAmount - fineAmount, 0);
+  const vatPercent = Number(invoice.vatPercent || 0);
+  const vatPercentText = vatPercent.toFixed(2);
+  const vatPercentBn = toBnNum(vatPercentText);
+
+  const detailRows = [
     {
-      label: "Previous Reading",
-      bnLabel: "পূর্ববর্তী রিডিং",
-      value: `${formatNumber(invoice.previousReading, language)} ${kwh}`,
+      label: formatLabel("Current Reading", "বর্তমান রিডিং", language),
+      value: formatNumber(Number(invoice.currentReading || 0), language),
     },
     {
-      label: "Current Reading",
-      bnLabel: "বর্তমান রিডিং",
-      value: `${formatNumber(invoice.currentReading, language)} ${kwh}`,
+      label: formatLabel("Previous Reading", "পূর্ববর্তী রিডিং", language),
+      value: formatNumber(Number(invoice.previousReading || 0), language),
     },
     {
-      label: "Units Consumed",
-      bnLabel: "ভোক্ত ইউনিট",
-      value: `${formatNumber(invoice.unitsConsumed, language)} ${kwh}`,
+      label: formatLabel("Units Consumed", "ব্যবহৃত ইউনিট", language),
+      value: formatNumber(Number(invoice.unitsConsumed || 0), language),
     },
     {
-      label: "Rate per Unit",
-      bnLabel: "প্রতি ইউনিট হার",
-      value: formatCurrency(invoice.ratePerUnit, language),
+      label: formatLabel("Rate per Unit", "প্রতি ইউনিট মূল্য", language),
+      value: formatCurrency(Number(invoice.ratePerUnit || 0), language),
     },
     {
-      label: "Unit Charge",
-      bnLabel: "ইউনিট চার্জ",
-      value: formatCurrency(invoice.unitCharge, language),
+      label: formatLabel("Unit Charge", "ব্যবহৃত ইউনিটের মূল্য", language),
+      value: formatCurrency(unitCharge, language),
     },
     {
-      label: "Service Charge",
-      bnLabel: "সার্ভিস চার্জ",
-      value: formatCurrency(invoice.serviceCharge || 0, language),
+      label: formatLabel(
+        `VAT (${vatPercentText}%)`,
+        `ভ্যাট (${vatPercentBn}%)`,
+        language,
+      ),
+      value: formatCurrency(vatAmount, language),
+    },
+    {
+      label: formatLabel(
+        "Monthly Total Electric Bill",
+        "মাসের সর্বমোট বিদ্যুৎ বিল",
+        language,
+      ),
+      value: formatCurrency(monthlyTotal, language),
+    },
+    {
+      label: formatLabel(
+        "Fine Amount",
+        "বিলম্ব মাশুল",
+        language,
+      ),
+      value: formatCurrency(fineAmount, language),
+    },
+    {
+      label: formatLabel(
+        "Total Bill with Fine",
+        "বিলম্ব মাশুল সহ সর্বমোট বিদ্যুৎ বিল",
+        language,
+      ),
+      value: formatCurrency(totalAmount, language),
+    },
+    {
+      label: formatLabel("In words", "কথায়", language),
+      value: formatAmountWordsInline(totalAmount, language),
+      align: "left",
+      monospace: false,
+      wrap: true,
     },
   ];
 
-  if (invoice.fine > 0) {
-    const fineLabel = invoice.fineNote ? `Fine (${invoice.fineNote})` : "Fine";
-    const fineLabelBn = invoice.fineNote
-      ? `জরিমানা (${invoice.fineNote})`
-      : "জরিমানা";
-    rows.push({
-      label: fineLabel,
-      bnLabel: fineLabelBn,
-      value: formatCurrency(invoice.fine, language),
-    });
-  }
-  if (invoice.vatPercent > 0) {
-    const vatPercentBn = toBnNum(invoice.vatPercent);
-    rows.push({
-      label: `VAT (${invoice.vatPercent}%)`,
-      bnLabel: `ভ্যাট (${vatPercentBn}%)`,
-      value: formatCurrency(invoice.vatAmount, language),
-    });
-  }
+  const labelCellBase = `border-right:1px solid #000;border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
+  const valueCellBase = `border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
+  const rowsHTML = detailRows
+    .map((row) => {
+      const valueStyle = [
+        valueCellBase,
+        row.align === "left" ? "text-align:left" : "text-align:right",
+        row.monospace === false ? "" : "font-family:monospace",
+        row.wrap ? "white-space:normal" : "white-space:nowrap",
+      ]
+        .filter(Boolean)
+        .join(";");
 
-  const rowsHTML = rows
-    .map(
-      (r) => `
-    <tr>
-      <td style="padding:${layout.rowPadding};border:1px solid #ddd;font-size:${layout.tableFont};">${formatLabel(r.label, r.bnLabel, language)}</td>
-      <td style="padding:${layout.rowPadding};border:1px solid #ddd;text-align:right;font-size:${layout.tableFont};font-family:monospace;">${r.value}</td>
-    </tr>
-  `,
-    )
+      return `
+        <tr>
+          <td style="${labelCellBase}font-weight:600;">${row.label}</td>
+          <td style="${valueStyle}">${row.value}</td>
+        </tr>
+      `;
+    })
     .join("");
 
-  const totalAmountWordsHTML = formatAmountWords(
-    invoice.totalAmount,
+  const detailsHeader = formatLabel(
+    "Electricity Bill Details",
+    "ব্যবহৃত বিদ্যুৎ বিলের বিবরণ",
     language,
-    compact,
   );
+  const dueDateLabel = formatLabel(
+    "Bill payment due date",
+    "বিদ্যুৎ বিল জমা দেওয়ার শেষ তারিখ",
+    language,
+  );
+  const dueDateValue = invoice.dueDate
+    ? formatDate(invoice.dueDate, language)
+    : emptyValue;
+
+  const footerNotesHTML = footerText
+    ? `<div style="margin-top:${layout.footerMarginTop};font-size:${layout.footerFont};font-style:italic;">${footerText}</div>`
+    : "";
 
   return `
-    <div style="position:relative;padding:${layout.padding};height:100%;">
+    <div style="position:relative;padding:${layout.padding};height:100%;color:#000;">
       ${paidSealHTML}
-      <div style="display:flex;gap:${layout.headerGap};margin-bottom:${layout.headerMarginBottom};padding-bottom:${layout.headerPaddingBottom};border-bottom:2px solid #1e3c78;">
+      <div style="display:flex;align-items:center;gap:${layout.headerGap};margin-bottom:${layout.headerMarginBottom};padding-bottom:${layout.headerPaddingBottom};border-bottom:1px solid #000;">
         <div style="width:${layout.logoSlotWidth};flex-shrink:0;">${logoHTML}</div>
-        <div style="flex:1;">
-          <div style="font-size:${layout.companyFont};font-weight:700;color:#1e3c78;margin-bottom:3px;">${companyName}</div>
-          <div style="font-size:${layout.addressFont};color:#000;line-height:${layout.addressLineHeight};">${headerAddressLabel}: ${companyAddress}</div>
-          <div style="font-size:${layout.contactFont};color:#000;margin-top:2px;">${headerPhoneLabel}: ${companyPhone}, ${headerEmailLabel}: ${companyEmail}</div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:${layout.companyFont};font-weight:700;line-height:1.2;">${companyName}</div>
+          ${companyAddress ? `<div style="font-size:${layout.companyMetaFont};line-height:${layout.companyMetaLineHeight};">${companyAddress}</div>` : ""}
+          ${contactLine ? `<div style="font-size:${layout.companyMetaFont};line-height:${layout.companyMetaLineHeight};">${contactLine}</div>` : ""}
         </div>
-        <div style="text-align:right;">
-          <div style="font-size:${layout.titleFont};font-weight:700;color:#1e3c78;">${invoiceTitle}</div>
-          <div style="font-size:${layout.copyFont};color:#000;margin-top:3px;">${copyLabel}</div>
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;gap:${layout.detailColumnGap};margin:${layout.detailMargin};font-size:${detailFont};">
-       
-        <div style="flex:1;min-width:0;">
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Customer", "গ্রাহক", language)}:</span><span style="${detailValueStyle}">${displayName}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Address", "ঠিকানা", language)}:</span><span style="${detailValueStyle}">${displayAddress}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Meter No", "মিটার নং", language)}:</span><span style="${detailValueStyle}">${displayMeterNo}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Phone", "ফোন", language)}:</span><span style="${detailValueStyle}">${displayPhone || (language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A")}</span></div>
-        </div>
-         <div style="flex:1;min-width:0;">
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Invoice No", "ইনভয়েস নং", language)}:</span><span style="${detailValueStyle}">${formatDisplayValue(invoice.invoiceNo, toBnNum(invoice.invoiceNo), language)}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Bill Month", "বিলের মাস", language)}:</span><span style="${detailValueStyle}">${formatBillMonth(invoice.billMonth, language)}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Issue Date", "ইস্যুর তারিখ", language)}:</span><span style="${detailValueStyle}">${formatDate(invoice.issueDate, language)}</span></div>
-          <div style="${detailRowStyle}"><span style="${detailLabelStyle}">${formatLabel("Due Date", "শেষ তারিখ", language)}:</span><span style="${detailValueStyle}">${invoice.dueDate ? formatDate(invoice.dueDate, language) : language === PDF_LANGUAGE.BANGLA ? bn("প্রযোজ্য নয়") : "N/A"}</span></div>
+        <div style="text-align:right;min-width:120px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+          ${serialNoText ? `<div style="font-size:${layout.copyFont};font-weight:600;">${serialNoText}</div>` : ""}
+          <div style="font-size:${layout.copyFont};font-weight:600;">${copyLabel}</div>
+          <div style="font-size:${layout.titleFont};font-weight:700;margin-top:2px;">${invoiceTitle}</div>
         </div>
       </div>
 
-      <table style="width:100%;border-collapse:collapse;margin-top:${layout.tableMargin};font-size:${layout.tableFont};">
-        <thead>
-          <tr><th style="background:#1e3c78;color:white;padding:${layout.headerPaddingLeft};text-align:left;font-weight:600;">${formatLabel("Description", "বিবরণ", language)}</th><th style="background:#1e3c78;color:white;padding:${layout.headerPaddingRight};text-align:right;font-weight:600;">${formatLabel("Amount", "পরিমাণ", language)}</th></tr>
-        </thead>
-        <tbody>${rowsHTML}</tbody>
-        <tfoot>
-          <tr><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:${layout.totalPadding};font-size:${layout.totalFont};">${formatLabel("TOTAL PAYABLE", "মোট প্রদেয়", language)}</td><td style="background:#ebf8ff;color:#1e3c78;font-weight:700;padding:${layout.totalPadding};text-align:right;font-size:${layout.totalFont};">${formatCurrency(invoice.totalAmount, language)}</td></tr>
-        </tfoot>
+      <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:${layout.infoGap};font-size:${layout.infoFont};margin-bottom:${layout.headerMarginBottom};">
+        <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
+          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Customer", "গ্রাহক", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayName}</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
+          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Shop No", "দোকান নং", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayShopNo}</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
+          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Meter No", "মিটার নং", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayMeterNo}</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
+          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Month", "মাস", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayBillMonth}</span>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:${layout.tableFont};border:1px solid #000;">
+        <colgroup>
+          <col style="width:62%;">
+          <col style="width:38%;">
+        </colgroup>
+        <tbody>
+          <tr>
+            <td style="${labelCellBase}font-weight:700;">${detailsHeader}</td>
+            <td style="${valueCellBase}"></td>
+          </tr>
+          ${rowsHTML}
+        </tbody>
       </table>
-      ${totalAmountWordsHTML}
 
-      <div style="position:absolute;bottom:${layout.footerBottom};left:${layout.footerSide};right:${layout.footerSide};display:flex;justify-content:space-between;align-items:flex-end;">
-        <div style="font-size:${layout.footerFont};color:#666;font-style:italic;max-width:55%;line-height:${layout.footerLineHeight};">
-          ${footerText}
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:${layout.footerMarginTop};">
+        <div style="font-size:${layout.footerFont};max-width:60%;">
+          <div>${dueDateLabel}: <span style="border-bottom:1px dotted #000;padding:0 6px;">${dueDateValue}</span></div>
+          ${footerNotesHTML}
         </div>
-        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;margin-top:${layout.signatureMarginTop}">
+        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;">
           <div style="height:${layout.signatureSpacer};"></div>
           <div style="border-top:1.5px solid #000;width:${layout.signatureWidth};padding-top:2px;font-size:${layout.signatureFont};font-weight:bold;line-height:1;font-family:Arial, sans-serif;color:#000;">
             ${formatLabel("Authorised Signature & Seal", "সংশ্লিষ্ট কর্মকর্তার স্বাক্ষর ও সিল", language)}
           </div>
         </div>
-        
       </div>
-      
     </div>`;
 }
 
@@ -457,13 +514,16 @@ function buildBatchCopyItems(invoices, copyType, language) {
   const normalizedCopyType = normalizeCopyType(copyType);
 
   return invoices.flatMap((invoice) => {
+    const serialNoText = formatSerialNoText(invoice.invoiceNo, language);
     const officeCopy = {
       invoice,
       copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
+      serialNoText: "",
     };
     const customerCopy = {
       invoice,
       copyLabel: formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
+      serialNoText,
     };
 
     if (normalizedCopyType === COPY_TYPES.OFFICE) return [officeCopy];
@@ -501,6 +561,7 @@ function buildLegalBatchHTML({
                   withPaidSeal,
                   slot.copyLabel,
                   "compact",
+                  slot.serialNoText,
                 )
               : "";
 
@@ -656,6 +717,7 @@ async function createInvoicePDF(
 ) {
   const c = invoice.customer || {};
   const language = normalizePdfLanguage(config.pdfLanguage);
+  const serialNoText = formatSerialNoText(invoice.invoiceNo, language);
 
   const officeCopyHTML = buildCopyHTML(
     invoice,
@@ -670,6 +732,8 @@ async function createInvoicePDF(
     language,
     withPaidSeal,
     formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
+    "standard",
+    serialNoText,
   );
   const cutLineText =
     language === PDF_LANGUAGE.BANGLA
