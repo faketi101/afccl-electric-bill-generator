@@ -1,25 +1,36 @@
 import { useState, useEffect } from "react";
 import api from "../../api";
 
+const defaultConfig = {
+  ratePerUnit: 8,
+  serviceCharge: 0,
+  vatPercent: 0,
+  fineType: "percentage",
+  fixedFineAmount: 0,
+  finePercent: 0,
+  pdfLanguage: "bangla_english",
+};
+
+const normalizeConfig = (value = {}) => ({
+  ...defaultConfig,
+  ...value,
+  fineType: value.fineType || "percentage",
+});
+
 export default function ConfigTab() {
-  const [config, setConfig] = useState({
-    ratePerUnit: 8,
-    serviceCharge: 0,
-    vatPercent: 0,
-    pdfLanguage: "bangla_english",
-  });
+  const [config, setConfig] = useState(defaultConfig);
   const [previewUnits, setPreviewUnits] = useState(100);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    api.get("/config").then((res) => setConfig(res.data));
+    api.get("/config").then((res) => setConfig(normalizeConfig(res.data)));
   }, []);
 
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       const res = await api.put("/config", config);
-      setConfig(res.data);
+      setConfig(normalizeConfig(res.data));
       setMsg("Configuration saved!");
     } catch (err) {
       setMsg("Error saving configuration");
@@ -29,8 +40,13 @@ export default function ConfigTab() {
   // Live preview calculation
   const unitCharge = previewUnits * config.ratePerUnit;
   const subtotal = unitCharge + Number(config.serviceCharge);
-  const vat = (subtotal * config.vatPercent) / 100;
-  const total = subtotal + vat;
+  const fineAmount =
+    config.fineType === "fixed"
+      ? Number(config.fixedFineAmount || 0)
+      : (subtotal * Number(config.finePercent || 0)) / 100;
+  const subtotalWithFine = subtotal + fineAmount;
+  const vat = (subtotalWithFine * config.vatPercent) / 100;
+  const total = subtotalWithFine + vat;
 
   return (
     <div className="grid-2">
@@ -90,6 +106,56 @@ export default function ConfigTab() {
           </label>
 
           <label className="form-label">
+            Default Fine Type
+            <select
+              className="form-input"
+              value={config.fineType || "percentage"}
+              onChange={(e) =>
+                setConfig({ ...config, fineType: e.target.value })
+              }
+            >
+              <option value="percentage">Percentage</option>
+              <option value="fixed">Fixed amount</option>
+            </select>
+          </label>
+
+          <div className="form-grid form-grid-compact">
+            <label className="form-label">
+              Fine Percentage (%)
+              <input
+                type="number"
+                className="form-input"
+                min="0"
+                step="0.1"
+                value={config.finePercent || 0}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    finePercent: Number(e.target.value || 0),
+                  })
+                }
+              />
+            </label>
+
+            <label className="form-label">
+              Fixed Fine Amount (BDT)
+              <input
+                type="number"
+                className="form-input"
+                min="0"
+                step="0.01"
+                value={config.fixedFineAmount || 0}
+                onChange={(e) =>
+                  setConfig({
+                    ...config,
+                    fixedFineAmount: Number(e.target.value || 0),
+                  })
+                }
+              />
+            </label>
+          </div>
+
+          <label className="form-label">
             PDF Language
             <select
               className="form-input"
@@ -132,6 +198,12 @@ export default function ConfigTab() {
               [
                 `Service Charge`,
                 `৳ ${Number(config.serviceCharge).toFixed(2)}`,
+              ],
+              [
+                config.fineType === "fixed"
+                  ? "Fixed Fine"
+                  : `Fine (${Number(config.finePercent || 0)}%)`,
+                `৳ ${fineAmount.toFixed(2)}`,
               ],
               [`VAT (${config.vatPercent}%)`, `৳ ${vat.toFixed(2)}`],
             ].map(([k, v]) => (

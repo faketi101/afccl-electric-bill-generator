@@ -16,6 +16,12 @@ const invoiceSchema = new mongoose.Schema(
     unitCharge: { type: Number }, // auto-calculated
     serviceCharge: { type: Number, default: 0 },
     fine: { type: Number, default: 0 }, // manual fine input
+    fineType: {
+      type: String,
+      enum: ["fixed", "percentage"],
+      default: "fixed",
+    },
+    finePercent: { type: Number, default: 0 },
     fineNote: { type: String, default: "" },
     vatPercent: { type: Number, default: 0 },
     vatAmount: { type: Number, default: 0 },

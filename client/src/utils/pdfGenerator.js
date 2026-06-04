@@ -180,6 +180,7 @@ function formatAmountWordsInline(amount, language) {
 function buildCopyHTML(
   invoice,
   settings,
+  config,
   language,
   withPaidSeal,
   copyLabel,
@@ -212,8 +213,6 @@ function buildCopyHTML(
         signatureSpacer: "24px",
         signatureWidth: "120px",
         signatureFont: "7.6px",
-        paidSealTop: "12mm",
-        paidSealRight: "8mm",
         paidSealWidth: "60px",
         paidSealHeight: "28px",
         paidSealBorder: "2px",
@@ -242,8 +241,6 @@ function buildCopyHTML(
         signatureSpacer: "60px",
         signatureWidth: "190px",
         signatureFont: "9.6px",
-        paidSealTop: "22mm",
-        paidSealRight: "14mm",
         paidSealWidth: "82px",
         paidSealHeight: "38px",
         paidSealBorder: "3px",
@@ -291,7 +288,7 @@ function buildCopyHTML(
 
   const paidSealHTML =
     withPaidSeal && invoice.status === "paid"
-      ? `<div style="position:absolute;top:${layout.paidSealTop};right:${layout.paidSealRight};width:${layout.paidSealWidth};height:${layout.paidSealHeight};border:${layout.paidSealBorder} solid #22c55e;color:#22c55e;transform:rotate(-12deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:${layout.paidSealFont};font-weight:bold;"><span>${paidLabel}</span><span style="font-size:${layout.paidSealDateFont};font-weight:normal;">${paidDate}</span></div>`
+      ? `<div style="width:${layout.paidSealWidth};height:${layout.paidSealHeight};margin-bottom:4px;border:${layout.paidSealBorder} solid #22c55e;color:#22c55e;transform:rotate(-8deg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:${layout.paidSealFont};font-weight:bold;"><span>${paidLabel}</span><span style="font-size:${layout.paidSealDateFont};font-weight:normal;">${paidDate}</span></div>`
       : "";
 
   const unitCharge = Number(invoice.unitCharge || 0);
@@ -302,6 +299,18 @@ function buildCopyHTML(
   const vatPercent = Number(invoice.vatPercent || 0);
   const vatPercentText = vatPercent.toFixed(2);
   const vatPercentBn = toBnNum(vatPercentText);
+  const invoiceFineType = invoice.fineType || config.fineType;
+  const finePercent = Number(invoice.finePercent || config.finePercent || 0);
+  const finePercentText = finePercent.toFixed(2).replace(/\.?0+$/, "");
+  const finePercentBn = toBnNum(finePercentText);
+  const fineLabel =
+    invoiceFineType === "percentage" && finePercent > 0
+      ? formatLabel(
+          `Fine Amount (${finePercentText}%)`,
+          `বিলম্ব মাশুল (${finePercentBn}%)`,
+          language,
+        )
+      : formatLabel("Fine Amount", "বিলম্ব মাশুল", language);
 
   const detailRows = [
     {
@@ -341,11 +350,7 @@ function buildCopyHTML(
       value: formatCurrency(monthlyTotal, language),
     },
     {
-      label: formatLabel(
-        "Fine Amount",
-        "বিলম্ব মাশুল",
-        language,
-      ),
+      label: fineLabel,
       value: formatCurrency(fineAmount, language),
     },
     {
@@ -407,7 +412,6 @@ function buildCopyHTML(
 
   return `
     <div style="position:relative;padding:${layout.padding};height:100%;color:#000;">
-      ${paidSealHTML}
       <div style="display:flex;align-items:center;gap:${layout.headerGap};margin-bottom:${layout.headerMarginBottom};padding-bottom:${layout.headerPaddingBottom};border-bottom:1px solid #000;">
         <div style="width:${layout.logoSlotWidth};flex-shrink:0;">${logoHTML}</div>
         <div style="flex:1;text-align:center;">
@@ -457,6 +461,7 @@ function buildCopyHTML(
 
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:${layout.footerMarginTop};">
         <div style="font-size:${layout.footerFont};max-width:60%;">
+          ${paidSealHTML}
           <div>${dueDateLabel}: <span style="border-bottom:1px dotted #000;padding:0 6px;">${dueDateValue}</span></div>
           ${footerNotesHTML}
         </div>
@@ -518,7 +523,7 @@ function buildBatchCopyItems(invoices, copyType, language) {
     const officeCopy = {
       invoice,
       copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
-      serialNoText: "",
+      serialNoText,
     };
     const customerCopy = {
       invoice,
@@ -537,6 +542,7 @@ function buildBatchCopyItems(invoices, copyType, language) {
 function buildLegalBatchHTML({
   invoices,
   settings,
+  config,
   language,
   withPaidSeal,
   copyType,
@@ -557,6 +563,7 @@ function buildLegalBatchHTML({
               ? buildCopyHTML(
                   slot.invoice,
                   settings,
+                  config,
                   language,
                   withPaidSeal,
                   slot.copyLabel,
@@ -647,6 +654,7 @@ async function createMonthlyLegalBillsPDF({
   const fullHTML = buildLegalBatchHTML({
     invoices,
     settings,
+    config,
     language,
     withPaidSeal,
     copyType: normalizedCopyType,
@@ -722,13 +730,17 @@ async function createInvoicePDF(
   const officeCopyHTML = buildCopyHTML(
     invoice,
     settings,
+    config,
     language,
     withPaidSeal,
     formatCopyLabel("Office Copy", "অফিস কপি", language),
+    "standard",
+    serialNoText,
   );
   const customerCopyHTML = buildCopyHTML(
     invoice,
     settings,
+    config,
     language,
     withPaidSeal,
     formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),

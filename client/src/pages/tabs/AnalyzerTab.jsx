@@ -14,6 +14,60 @@ const supportsMonthInput = (() => {
   return input.type === "month";
 })();
 
+const getLocalDateInputValue = (value = new Date()) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const localDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60000,
+  );
+  return localDate.toISOString().slice(0, 10);
+};
+
+const isDueDateOver = (invoice) => {
+  if (!invoice?.dueDate) return false;
+
+  const dueDate = new Date(invoice.dueDate);
+  if (Number.isNaN(dueDate.getTime())) return false;
+
+  const today = new Date();
+  const dueDay = new Date(
+    dueDate.getFullYear(),
+    dueDate.getMonth(),
+    dueDate.getDate(),
+  );
+  const todayDay = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+
+  return dueDay < todayDay;
+};
+
+const getFineBaseAmount = (invoice) => {
+  const subtotal =
+    Number(invoice?.unitCharge || 0) + Number(invoice?.serviceCharge || 0);
+  if (subtotal > 0) return subtotal;
+
+  return Math.max(
+    Number(invoice?.totalAmount || 0) -
+      Number(invoice?.fine || 0) -
+      Number(invoice?.vatAmount || 0),
+    0,
+  );
+};
+
+const getConfiguredFineAmount = (invoice, fineType, config) => {
+  if (fineType === "fixed") {
+    return Number(config.fixedFineAmount || 0);
+  }
+
+  return (
+    (getFineBaseAmount(invoice) * Number(config.finePercent || 0)) / 100
+  );
+};
+
 export default function AnalyzerTab() {
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -29,6 +83,7 @@ export default function AnalyzerTab() {
   const [batchWithPaidSeal, setBatchWithPaidSeal] = useState(false);
   const [batchPrintBusy, setBatchPrintBusy] = useState(false);
   const [batchPrintError, setBatchPrintError] = useState("");
+  const [paidModal, setPaidModal] = useState(null);
 
   const load = async () => {
     const [inv, c, s, cf] = await Promise.all([
@@ -192,10 +247,103 @@ export default function AnalyzerTab() {
     return output;
   }, [page, totalPages]);
 
+  const openPaidModal = (invoice) => {
+    const fineType = config.fineType || "percentage";
+
+    setPaidModal({
+      invoice,
+      paidDateMode: "today",
+      paidDate: getLocalDateInputValue(),
+      fineType,
+      fine: getConfiguredFineAmount(invoice, fineType, config).toFixed(2),
+      fineNote: invoice.fineNote || "",
+      isOverdue: isDueDateOver(invoice),
+      error: "",
+      saving: false,
+    });
+  };
+
+  const updatePaidFineType = (fineType) => {
+    setPaidModal((current) => ({
+      ...current,
+      fineType,
+      fine: getConfiguredFineAmount(
+        current.invoice,
+        fineType,
+        config,
+      ).toFixed(2),
+    }));
+  };
+
+  const closePaidModal = () => {
+    setPaidModal((current) => (current?.saving ? current : null));
+  };
+
   const toggleStatus = async (inv) => {
-    const newStatus = inv.status === "paid" ? "unpaid" : "paid";
-    await api.patch(`/invoices/${inv._id}/status`, { status: newStatus });
+    if (inv.status !== "paid") {
+      openPaidModal(inv);
+      return;
+    }
+
+    await api.patch(`/invoices/${inv._id}/status`, { status: "unpaid" });
     load();
+  };
+
+  const submitPaidModal = async (e) => {
+    e.preventDefault();
+    if (!paidModal) return;
+
+    const paidAt =
+      paidModal.paidDateMode === "today"
+        ? getLocalDateInputValue()
+        : paidModal.paidDate;
+
+    if (!paidAt) {
+      setPaidModal((current) => ({
+        ...current,
+        error: "Select a paid date before marking this bill paid.",
+      }));
+      return;
+    }
+
+    const fineAmount = Number(paidModal.fine || 0);
+    if (
+      paidModal.isOverdue &&
+      (!Number.isFinite(fineAmount) || fineAmount < 0)
+    ) {
+      setPaidModal((current) => ({
+        ...current,
+        error: "Enter a valid fine amount or leave it as 0.",
+      }));
+      return;
+    }
+
+    setPaidModal((current) => ({ ...current, saving: true, error: "" }));
+
+    try {
+      const payload = { status: "paid", paidAt };
+      if (paidModal.isOverdue) {
+        payload.fine = fineAmount;
+        payload.fineType = paidModal.fineType;
+        payload.finePercent =
+          paidModal.fineType === "percentage"
+            ? Number(config.finePercent || 0)
+            : 0;
+        payload.fineNote = paidModal.fineNote;
+      }
+
+      await api.patch(`/invoices/${paidModal.invoice._id}/status`, payload);
+      setPaidModal(null);
+      load();
+    } catch (err) {
+      setPaidModal((current) => ({
+        ...current,
+        saving: false,
+        error:
+          err.response?.data?.message ||
+          "Could not mark this invoice as paid.",
+      }));
+    }
   };
 
   const resetFilters = () => {
@@ -806,6 +954,178 @@ export default function AnalyzerTab() {
           </tbody>
         </table>
       </div>
+
+      {paidModal && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="paid-modal-title"
+          >
+            <form onSubmit={submitPaidModal} className="paid-modal-form">
+              <div>
+                <h3 id="paid-modal-title" className="modal-title">
+                  Mark Bill Paid
+                </h3>
+                <div className="modal-subtitle">
+                  {paidModal.invoice.invoiceNo} ·{" "}
+                  {paidModal.invoice.customer?.name || "Customer"}
+                </div>
+              </div>
+
+              <div className="paid-date-options">
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="paidDateMode"
+                    value="today"
+                    checked={paidModal.paidDateMode === "today"}
+                    onChange={() =>
+                      setPaidModal((current) => ({
+                        ...current,
+                        paidDateMode: "today",
+                        paidDate: getLocalDateInputValue(),
+                      }))
+                    }
+                  />
+                  Today
+                </label>
+
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="paidDateMode"
+                    value="custom"
+                    checked={paidModal.paidDateMode === "custom"}
+                    onChange={() =>
+                      setPaidModal((current) => ({
+                        ...current,
+                        paidDateMode: "custom",
+                      }))
+                    }
+                  />
+                  Custom date
+                </label>
+              </div>
+
+              <label className="form-label">
+                Paid Date
+                <input
+                  type="date"
+                  className="form-input"
+                  value={
+                    paidModal.paidDateMode === "today"
+                      ? getLocalDateInputValue()
+                      : paidModal.paidDate
+                  }
+                  disabled={paidModal.paidDateMode === "today"}
+                  onChange={(e) =>
+                    setPaidModal((current) => ({
+                      ...current,
+                      paidDate: e.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+
+              {paidModal.isOverdue && (
+                <div className="overdue-fine-panel">
+                  <div className="message message-warning">
+                    Due date is over. Add late fine details if needed.
+                  </div>
+
+                  <div className="paid-date-options">
+                    <label className="radio-option">
+                      <input
+                        type="radio"
+                        name="fineType"
+                        value="percentage"
+                        checked={paidModal.fineType === "percentage"}
+                        onChange={() => updatePaidFineType("percentage")}
+                      />
+                      Percentage ({Number(config.finePercent || 0)}%)
+                    </label>
+
+                    <label className="radio-option">
+                      <input
+                        type="radio"
+                        name="fineType"
+                        value="fixed"
+                        checked={paidModal.fineType === "fixed"}
+                        onChange={() => updatePaidFineType("fixed")}
+                      />
+                      Fixed (৳{" "}
+                      {Number(config.fixedFineAmount || 0).toFixed(2)})
+                    </label>
+                  </div>
+
+                  <label className="form-label">
+                    Fine Amount (BDT — optional)
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="0"
+                      step="0.01"
+                      value={paidModal.fine}
+                      onChange={(e) =>
+                        setPaidModal((current) => ({
+                          ...current,
+                          fine: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="form-label">
+                    Fine Note (optional)
+                    <input
+                      className="form-input"
+                      value={paidModal.fineNote}
+                      onChange={(e) =>
+                        setPaidModal((current) => ({
+                          ...current,
+                          fineNote: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Late payment penalty"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {paidModal.error && (
+                <div className="message message-error">{paidModal.error}</div>
+              )}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={closePaidModal}
+                  className="btn"
+                  disabled={paidModal.saving}
+                  style={{
+                    background: "#fff",
+                    color: "#4a5568",
+                    border: "1px solid #cbd5e0",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={paidModal.saving}
+                  style={{ background: "#38a169" }}
+                >
+                  {paidModal.saving ? "Saving..." : "Mark Paid"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

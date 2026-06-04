@@ -65,15 +65,46 @@ router.post("/", async (req, res) => {
 // PATCH /api/invoices/:id/status  — mark paid or unpaid
 router.patch("/:id/status", async (req, res) => {
   try {
-    const { status } = req.body;
-    const update = { status };
-    if (status === "paid") update.paidAt = new Date();
-    else update.paidAt = null;
+    const { status, paidAt, fine, fineType, finePercent, fineNote } = req.body;
 
-    const invoice = await Invoice.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-    }).populate("customer");
-    res.json(invoice);
+    if (!["paid", "unpaid"].includes(status)) {
+      return res.status(400).json({ message: "Invalid invoice status" });
+    }
+
+    const invoice = await Invoice.findById(req.params.id);
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    invoice.status = status;
+    invoice.paidAt = status === "paid" ? paidAt || new Date() : null;
+
+    if (status === "paid") {
+      if (fine !== undefined) {
+        const fineAmount = Number(fine || 0);
+        if (!Number.isFinite(fineAmount) || fineAmount < 0) {
+          return res.status(400).json({ message: "Invalid fine amount" });
+        }
+        invoice.fine = fineAmount;
+      }
+      if (fineType !== undefined) {
+        if (!["fixed", "percentage"].includes(fineType)) {
+          return res.status(400).json({ message: "Invalid fine type" });
+        }
+        invoice.fineType = fineType;
+      }
+      if (finePercent !== undefined) {
+        const percent = Number(finePercent || 0);
+        if (!Number.isFinite(percent) || percent < 0) {
+          return res.status(400).json({ message: "Invalid fine percentage" });
+        }
+        invoice.finePercent = percent;
+      }
+      if (fineNote !== undefined) invoice.fineNote = fineNote || "";
+    }
+
+    await invoice.save();
+
+    const populated = await Invoice.findById(invoice._id).populate("customer");
+    res.json(populated);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
