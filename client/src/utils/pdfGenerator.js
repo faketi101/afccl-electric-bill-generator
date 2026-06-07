@@ -64,12 +64,9 @@ function formatDisplayValue(en, bnVal, language) {
   return en || "";
 }
 
-function formatSerialNoText(serialNo, language) {
-  if (!serialNo) return "";
-  const cleanSerial = String(serialNo).trim().replace(/^inv[\s\/_-]*/i, "");
-  const label = formatLabel("Serial No", "সিরিয়াল নং", language);
-  const value = formatDisplayValue(cleanSerial, toBnNum(cleanSerial), language);
-  return `${label}: ${value}`;
+function formatSerialNoText(language) {
+  const label = formatLabel("Serial no", "সিরিয়াল নং", language);
+  return `${label}:`;
 }
 
 function formatNumber(n, language) {
@@ -200,24 +197,25 @@ function buildCopyHTML(
         logoWidth: "36px",
         logoHeight: "30px",
         companyFont: "12.8px",
-        companyMetaFont: "8.2px",
+        companyMetaFont: "9px",
         companyMetaLineHeight: "1.2",
         titleFont: "11.6px",
-        copyFont: "8.4px",
-        infoFont: "8.2px",
+        copyFont: "9px",
+        infoFont: "9px",
         infoGap: "6px",
-        tableFont: "8.4px",
+        tableFont: "12px",
         rowPadding: "2px 6px",
-        footerFont: "7.6px",
+        footerFont: "9px",
+        dueDateFont: "11px",
         footerMarginTop: "3px",
-        signatureSpacer: "24px",
+        signatureSpacer: "34px",
         signatureWidth: "120px",
-        signatureFont: "7.6px",
+        signatureFont: "9px",
         paidSealWidth: "60px",
         paidSealHeight: "28px",
         paidSealBorder: "2px",
         paidSealFont: "9px",
-        paidSealDateFont: "7px",
+        paidSealDateFont: "9px",
       }
     : {
         padding: "12mm 14mm",
@@ -234,9 +232,10 @@ function buildCopyHTML(
         copyFont: "10.5px",
         infoFont: "9.8px",
         infoGap: "10px",
-        tableFont: "10.4px",
+        tableFont: "12px",
         rowPadding: "4px 8px",
         footerFont: "9.6px",
+        dueDateFont: "11px",
         footerMarginTop: "6px",
         signatureSpacer: "60px",
         signatureWidth: "190px",
@@ -362,10 +361,11 @@ function buildCopyHTML(
       value: formatCurrency(totalAmount, language),
     },
     {
-      label: formatLabel("In words", "কথায়", language),
+      label: formatLabel("In words", "কথায়", language),
       value: formatAmountWordsInline(totalAmount, language),
       align: "left",
       monospace: false,
+      fullWidth: true,
       wrap: true,
     },
   ];
@@ -374,6 +374,16 @@ function buildCopyHTML(
   const valueCellBase = `border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
   const rowsHTML = detailRows
     .map((row) => {
+      if (row.fullWidth) {
+        return `
+        <tr>
+          <td colspan="2" style="${valueCellBase}text-align:left;white-space:normal;">
+            <span style="font-weight:600;">${row.label}:</span> ${row.value}
+          </td>
+        </tr>
+      `;
+      }
+
       const valueStyle = [
         valueCellBase,
         row.align === "left" ? "text-align:left" : "text-align:right",
@@ -409,6 +419,9 @@ function buildCopyHTML(
   const footerNotesHTML = footerText
     ? `<div style="margin-top:${layout.footerMarginTop};font-size:${layout.footerFont};font-style:italic;">${footerText}</div>`
     : "";
+  const serialNoHTML = serialNoText
+    ? `<div style="font-size:${layout.copyFont};font-weight:600;margin-right:34px;white-space:nowrap;">${serialNoText} <span style="display:inline-block;width:76px;border-bottom:1px dotted #000;">&nbsp;</span></div>`
+    : "";
 
   return `
     <div style="position:relative;padding:${layout.padding};height:100%;color:#000;">
@@ -420,7 +433,7 @@ function buildCopyHTML(
           ${contactLine ? `<div style="font-size:${layout.companyMetaFont};line-height:${layout.companyMetaLineHeight};">${contactLine}</div>` : ""}
         </div>
         <div style="text-align:right;min-width:120px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-          ${serialNoText ? `<div style="font-size:${layout.copyFont};font-weight:600;">${serialNoText}</div>` : ""}
+          ${serialNoHTML}
           <div style="font-size:${layout.copyFont};font-weight:600;">${copyLabel}</div>
           <div style="font-size:${layout.titleFont};font-weight:700;margin-top:2px;">${invoiceTitle}</div>
         </div>
@@ -459,10 +472,10 @@ function buildCopyHTML(
         </tbody>
       </table>
 
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:${layout.footerMarginTop};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:${layout.footerMarginTop};">
         <div style="font-size:${layout.footerFont};max-width:60%;">
           ${paidSealHTML}
-          <div>${dueDateLabel}: <span style="border-bottom:1px dotted #000;padding:0 6px;">${dueDateValue}</span></div>
+          <div style="font-size:${layout.dueDateFont};font-weight:600;">${dueDateLabel}: <span style="border-bottom:1px dotted #000;padding:0 6px;">${dueDateValue}</span></div>
           ${footerNotesHTML}
         </div>
         <div style="text-align:center;display:flex;flex-direction:column;align-items:center;">
@@ -519,7 +532,7 @@ function buildBatchCopyItems(invoices, copyType, language) {
   const normalizedCopyType = normalizeCopyType(copyType);
 
   return invoices.flatMap((invoice) => {
-    const serialNoText = formatSerialNoText(invoice.invoiceNo, language);
+    const serialNoText = formatSerialNoText(language);
     const officeCopy = {
       invoice,
       copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
@@ -624,7 +637,7 @@ function buildLegalBatchHTML({
       top: -10px;
       background: white;
       padding: 2px 8px;
-      font-size: 8px;
+      font-size: 9px;
       color: #999;
       font-family: 'Tiro Bangla', Arial, sans-serif;
     }
@@ -725,7 +738,7 @@ async function createInvoicePDF(
 ) {
   const c = invoice.customer || {};
   const language = normalizePdfLanguage(config.pdfLanguage);
-  const serialNoText = formatSerialNoText(invoice.invoiceNo, language);
+  const serialNoText = formatSerialNoText(language);
 
   const officeCopyHTML = buildCopyHTML(
     invoice,
