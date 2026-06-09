@@ -24,25 +24,33 @@ const getLocalDateInputValue = (value = new Date()) => {
   return localDate.toISOString().slice(0, 10);
 };
 
-const isDueDateOver = (invoice) => {
+const getDateOnly = (value) => {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const dateInputMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateInputMatch) {
+      return new Date(
+        Number(dateInputMatch[1]),
+        Number(dateInputMatch[2]) - 1,
+        Number(dateInputMatch[3]),
+      );
+    }
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+};
+
+const isDueDateOver = (invoice, comparisonDate = new Date()) => {
   if (!invoice?.dueDate) return false;
 
-  const dueDate = new Date(invoice.dueDate);
-  if (Number.isNaN(dueDate.getTime())) return false;
+  const dueDay = getDateOnly(invoice.dueDate);
+  const comparisonDay = getDateOnly(comparisonDate);
+  if (!dueDay || !comparisonDay) return false;
 
-  const today = new Date();
-  const dueDay = new Date(
-    dueDate.getFullYear(),
-    dueDate.getMonth(),
-    dueDate.getDate(),
-  );
-  const todayDay = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  );
-
-  return dueDay < todayDay;
+  return dueDay < comparisonDay;
 };
 
 const getFineBaseAmount = (invoice) => {
@@ -257,7 +265,6 @@ export default function AnalyzerTab() {
       fineType,
       fine: getConfiguredFineAmount(invoice, fineType, config).toFixed(2),
       fineNote: invoice.fineNote || "",
-      isOverdue: isDueDateOver(invoice),
       error: "",
       saving: false,
     });
@@ -306,9 +313,10 @@ export default function AnalyzerTab() {
       return;
     }
 
+    const isPaidDateOverdue = isDueDateOver(paidModal.invoice, paidAt);
     const fineAmount = Number(paidModal.fine || 0);
     if (
-      paidModal.isOverdue &&
+      isPaidDateOverdue &&
       (!Number.isFinite(fineAmount) || fineAmount < 0)
     ) {
       setPaidModal((current) => ({
@@ -322,7 +330,7 @@ export default function AnalyzerTab() {
 
     try {
       const payload = { status: "paid", paidAt };
-      if (paidModal.isOverdue) {
+      if (isPaidDateOverdue) {
         payload.fine = fineAmount;
         payload.fineType = paidModal.fineType;
         payload.finePercent =
@@ -330,6 +338,10 @@ export default function AnalyzerTab() {
             ? Number(config.finePercent || 0)
             : 0;
         payload.fineNote = paidModal.fineNote;
+      } else {
+        payload.fine = 0;
+        payload.finePercent = 0;
+        payload.fineNote = "";
       }
 
       await api.patch(`/invoices/${paidModal.invoice._id}/status`, payload);
@@ -448,6 +460,14 @@ export default function AnalyzerTab() {
     .reduce((s, row) => s + Number(row.invoice.totalAmount || 0), 0);
   const generatedCount = filtered.filter((row) => row.generated).length;
   const notGeneratedCount = filtered.length - generatedCount;
+  const paidModalDate = paidModal
+    ? paidModal.paidDateMode === "today"
+      ? getLocalDateInputValue()
+      : paidModal.paidDate
+    : "";
+  const paidModalIsOverdue = paidModal
+    ? isDueDateOver(paidModal.invoice, paidModalDate)
+    : false;
 
   return (
     <div>
@@ -1030,7 +1050,7 @@ export default function AnalyzerTab() {
                 />
               </label>
 
-              {paidModal.isOverdue && (
+              {paidModalIsOverdue && (
                 <div className="overdue-fine-panel">
                   <div className="message message-warning">
                     Due date is over. Add late fine details if needed.

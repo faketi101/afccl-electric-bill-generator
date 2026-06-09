@@ -69,6 +69,90 @@ function formatSerialNoText(language) {
   return `${label}:`;
 }
 
+function formatPercent(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return "0";
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+function getBillMonthParts(bm) {
+  if (!bm) return null;
+  const trimmed = String(bm).trim();
+  const enMonths = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ];
+
+  const numericMatch = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+  if (numericMatch) {
+    const month = Number(numericMatch[2]);
+    if (month >= 1 && month <= 12) {
+      return { year: numericMatch[1], month };
+    }
+  }
+
+  const compactMatch = trimmed.match(/^(\d{4})(\d{2})$/);
+  if (compactMatch) {
+    const month = Number(compactMatch[2]);
+    if (month >= 1 && month <= 12) {
+      return { year: compactMatch[1], month };
+    }
+  }
+
+  const nameMatch = trimmed.match(/^([A-Za-z]+)[\s/-]+(\d{4})$/);
+  if (nameMatch) {
+    const monthIndex = enMonths.indexOf(nameMatch[1].toLowerCase());
+    if (monthIndex >= 0) {
+      return { year: nameMatch[2], month: monthIndex + 1 };
+    }
+  }
+
+  return null;
+}
+
+function getSerialPrefix(invoice) {
+  const parts = getBillMonthParts(invoice?.billMonth);
+  if (parts) return `${parts.year}${String(parts.month).padStart(2, "0")}`;
+
+  const fallbackDate = invoice?.issueDate || invoice?.createdAt || new Date();
+  const d = new Date(fallbackDate);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getInvoiceSequence(invoice) {
+  const match = String(invoice?.invoiceNo || "").match(/(\d+)\D*$/);
+  if (!match) return 1;
+  const sequence = Number(match[1]);
+  return Number.isFinite(sequence) && sequence > 0 ? sequence : 1;
+}
+
+function formatGeneratedSerialNo(invoice, serialIndex = null) {
+  const prefix = getSerialPrefix(invoice);
+  const sequence =
+    serialIndex === null || serialIndex === undefined
+      ? getInvoiceSequence(invoice)
+      : Number(serialIndex) + 1;
+  return `${prefix}-${String(sequence).padStart(3, "0")}`;
+}
+
+function formatSerialNoLine(invoice, language, serialIndex = null) {
+  return `${formatSerialNoText(language)} ${formatGeneratedSerialNo(
+    invoice,
+    serialIndex,
+  )}`;
+}
+
 function formatNumber(n, language) {
   if (language === PDF_LANGUAGE.BANGLA) return bn(toBnNum(n));
   if (language === PDF_LANGUAGE.ENGLISH) return String(n);
@@ -296,11 +380,11 @@ function buildCopyHTML(
   const totalAmount = Number(invoice.totalAmount || 0);
   const monthlyTotal = Math.max(totalAmount - fineAmount, 0);
   const vatPercent = Number(invoice.vatPercent || 0);
-  const vatPercentText = vatPercent.toFixed(2);
+  const vatPercentText = formatPercent(vatPercent);
   const vatPercentBn = toBnNum(vatPercentText);
   const invoiceFineType = invoice.fineType || config.fineType;
   const finePercent = Number(invoice.finePercent || config.finePercent || 0);
-  const finePercentText = finePercent.toFixed(2).replace(/\.?0+$/, "");
+  const finePercentText = formatPercent(finePercent);
   const finePercentBn = toBnNum(finePercentText);
   const fineLabel =
     invoiceFineType === "percentage" && finePercent > 0
@@ -308,8 +392,10 @@ function buildCopyHTML(
           `Fine Amount (${finePercentText}%)`,
           `বিলম্ব মাশুল (${finePercentBn}%)`,
           language,
-        )
+      )
       : formatLabel("Fine Amount", "বিলম্ব মাশুল", language);
+  const monthlyTotalWords = formatAmountWordsInline(monthlyTotal, language);
+  const totalAmountWords = formatAmountWordsInline(totalAmount, language);
 
   const detailRows = [
     {
@@ -341,11 +427,11 @@ function buildCopyHTML(
       value: formatCurrency(vatAmount, language),
     },
     {
-      label: formatLabel(
+      label: `${formatLabel(
         "Monthly Total Electric Bill",
         "মাসের সর্বমোট বিদ্যুৎ বিল",
         language,
-      ),
+      )} (${monthlyTotalWords})`,
       value: formatCurrency(monthlyTotal, language),
     },
     {
@@ -353,24 +439,16 @@ function buildCopyHTML(
       value: formatCurrency(fineAmount, language),
     },
     {
-      label: formatLabel(
+      label: `${formatLabel(
         "Total Bill with Fine",
         "বিলম্ব মাশুল সহ সর্বমোট বিদ্যুৎ বিল",
         language,
-      ),
+      )} (${totalAmountWords})`,
       value: formatCurrency(totalAmount, language),
-    },
-    {
-      label: formatLabel("In words", "কথায়", language),
-      value: formatAmountWordsInline(totalAmount, language),
-      align: "left",
-      monospace: false,
-      fullWidth: true,
-      wrap: true,
     },
   ];
 
-  const labelCellBase = `border-right:1px solid #000;border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
+  const labelCellBase = `border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
   const valueCellBase = `border-bottom:1px solid #000;padding:${layout.rowPadding};vertical-align:top;`;
   const rowsHTML = detailRows
     .map((row) => {
@@ -420,7 +498,7 @@ function buildCopyHTML(
     ? `<div style="margin-top:${layout.footerMarginTop};font-size:${layout.footerFont};font-style:italic;">${footerText}</div>`
     : "";
   const serialNoHTML = serialNoText
-    ? `<div style="font-size:${layout.copyFont};font-weight:600;margin-right:34px;white-space:nowrap;">${serialNoText} <span style="display:inline-block;width:76px;border-bottom:1px dotted #000;">&nbsp;</span></div>`
+    ? `<div style="font-size:${layout.copyFont};font-weight:600;margin-right:34px;white-space:nowrap;">${serialNoText}</div>`
     : "";
 
   return `
@@ -531,8 +609,8 @@ function normalizeCopyType(copyType) {
 function buildBatchCopyItems(invoices, copyType, language) {
   const normalizedCopyType = normalizeCopyType(copyType);
 
-  return invoices.flatMap((invoice) => {
-    const serialNoText = formatSerialNoText(language);
+  return invoices.flatMap((invoice, invoiceIndex) => {
+    const serialNoText = formatSerialNoLine(invoice, language, invoiceIndex);
     const officeCopy = {
       invoice,
       copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
@@ -738,7 +816,7 @@ async function createInvoicePDF(
 ) {
   const c = invoice.customer || {};
   const language = normalizePdfLanguage(config.pdfLanguage);
-  const serialNoText = formatSerialNoText(language);
+  const serialNoText = formatSerialNoLine(invoice, language);
 
   const officeCopyHTML = buildCopyHTML(
     invoice,

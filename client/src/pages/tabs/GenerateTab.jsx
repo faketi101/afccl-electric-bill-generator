@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import api from "../../api";
-import { generateInvoicePDF } from "../../utils/pdfGenerator";
 
 const supportsMonthInput = (() => {
   const input = document.createElement("input");
@@ -11,7 +10,6 @@ const supportsMonthInput = (() => {
 export default function GenerateTab() {
   const [customers, setCustomers] = useState([]);
   const [config, setConfig] = useState({});
-  const [settings, setSettings] = useState({});
   const [form, setForm] = useState({
     customerId: "",
     billMonth: "",
@@ -27,14 +25,9 @@ export default function GenerateTab() {
   const [customerSearch, setCustomerSearch] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      api.get("/customers"),
-      api.get("/config"),
-      api.get("/settings"),
-    ]).then(([c, cf, s]) => {
+    Promise.all([api.get("/customers"), api.get("/config")]).then(([c, cf]) => {
       setCustomers(c.data);
       setConfig(cf.data);
-      setSettings(s.data);
     });
   }, []);
 
@@ -69,9 +62,6 @@ export default function GenerateTab() {
       });
       setMsg(`Invoice ${res.data.invoiceNo} created!`);
       setMsgType("success");
-
-      // Auto-download PDF
-      generateInvoicePDF(res.data, settings, false, config);
 
       setForm({
         customerId: "",
@@ -221,7 +211,7 @@ export default function GenerateTab() {
             className="btn btn-primary"
             style={{ background: "#2f855a" }}
           >
-            Generate & Download PDF
+            Generate Bill
           </button>
         </form>
       </div>
