@@ -75,6 +75,68 @@ function formatPercent(value) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
+function getFineBaseAmount(invoice) {
+  const subtotal =
+    Number(invoice?.unitCharge || 0) + Number(invoice?.serviceCharge || 0);
+  if (subtotal > 0) return subtotal;
+
+  return Math.max(
+    Number(invoice?.totalAmount || 0) -
+      Number(invoice?.fine || 0) -
+      Number(invoice?.vatAmount || 0),
+    0,
+  );
+}
+
+function getConfiguredFineAmount(invoice, config = {}) {
+  if ((config.fineType || "percentage") === "fixed") {
+    return Number(config.fixedFineAmount || 0);
+  }
+
+  return (
+    (getFineBaseAmount(invoice) * Number(config.finePercent || 0)) / 100
+  );
+}
+
+function getPdfFineDetails(invoice, config = {}) {
+  const savedFine = Number(invoice.fine || 0);
+  const savedFineType = invoice.fineType || config.fineType || "fixed";
+
+  if (savedFine > 0) {
+    return {
+      amount: savedFine,
+      type: savedFineType,
+      percent:
+        savedFineType === "percentage"
+          ? Number(invoice.finePercent || config.finePercent || 0)
+          : 0,
+      isConfiguredDefault: false,
+    };
+  }
+
+  if (!config.applyDefaultFineInPdf) {
+    return {
+      amount: 0,
+      type: savedFineType,
+      percent: 0,
+      isConfiguredDefault: false,
+    };
+  }
+
+  const configuredType = config.fineType || "percentage";
+  const configuredAmount = getConfiguredFineAmount(invoice, config);
+
+  return {
+    amount: Number.isFinite(configuredAmount)
+      ? Math.max(configuredAmount, 0)
+      : 0,
+    type: configuredType,
+    percent:
+      configuredType === "percentage" ? Number(config.finePercent || 0) : 0,
+    isConfiguredDefault: true,
+  };
+}
+
 function getBillMonthParts(bm) {
   if (!bm) return null;
   const trimmed = String(bm).trim();
@@ -376,14 +438,17 @@ function buildCopyHTML(
 
   const unitCharge = Number(invoice.unitCharge || 0);
   const vatAmount = Number(invoice.vatAmount || 0);
-  const fineAmount = Number(invoice.fine || 0);
-  const totalAmount = Number(invoice.totalAmount || 0);
+  const pdfFine = getPdfFineDetails(invoice, config);
+  const fineAmount = pdfFine.amount;
+  const totalAmount =
+    Number(invoice.totalAmount || 0) +
+    (pdfFine.isConfiguredDefault ? fineAmount : 0);
   const monthlyTotal = Math.max(totalAmount - fineAmount, 0);
   const vatPercent = Number(invoice.vatPercent || 0);
   const vatPercentText = formatPercent(vatPercent);
   const vatPercentBn = toBnNum(vatPercentText);
-  const invoiceFineType = invoice.fineType || config.fineType;
-  const finePercent = Number(invoice.finePercent || config.finePercent || 0);
+  const invoiceFineType = pdfFine.type;
+  const finePercent = pdfFine.percent;
   const finePercentText = formatPercent(finePercent);
   const finePercentBn = toBnNum(finePercentText);
   const fineLabel =

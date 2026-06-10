@@ -12,6 +12,7 @@ const configSchema = new mongoose.Schema({
   },
   fixedFineAmount: { type: Number, default: 0 },
   finePercent: { type: Number, default: 0 },
+  applyDefaultFineInPdf: { type: Boolean, default: false },
   pdfLanguage:  {
     type: String,
     enum: ['bangla', 'english', 'bangla_english'],

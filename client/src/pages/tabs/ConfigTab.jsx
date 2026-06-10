@@ -8,6 +8,7 @@ const defaultConfig = {
   fineType: "percentage",
   fixedFineAmount: 0,
   finePercent: 0,
+  applyDefaultFineInPdf: false,
   pdfLanguage: "bangla_english",
 };
 
@@ -154,6 +155,29 @@ export default function ConfigTab() {
               />
             </label>
           </div>
+
+          <label
+            className="form-label"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              flexDirection: "row",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(config.applyDefaultFineInPdf)}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  applyDefaultFineInPdf: e.target.checked,
+                })
+              }
+              style={{ width: "18px", height: "18px" }}
+            />
+            Add default fine in generated PDFs
+          </label>
 
           <label className="form-label">
             PDF Language
