@@ -16,7 +16,9 @@ const COPY_TYPES = {
 const LEGAL_PAGE = {
   width: 215.9,
   height: 355.6,
+  format: "legal",
 };
+const LEGAL_PRINT_INSET_MM = 4;
 
 function normalizePdfLanguage(language) {
   if (language === "bangla") return PDF_LANGUAGE.BANGLA;
@@ -831,8 +833,10 @@ async function createMonthlyLegalBillsPDF({
     const pdf = new jsPDF({
       orientation: "p",
       unit: "mm",
-      format: [LEGAL_PAGE.width, LEGAL_PAGE.height],
+      format: LEGAL_PAGE.format,
     });
+    const printWidth = LEGAL_PAGE.width - LEGAL_PRINT_INSET_MM * 2;
+    const printHeight = LEGAL_PAGE.height - LEGAL_PRINT_INSET_MM * 2;
 
     for (let i = 0; i < pages.length; i += 1) {
       const canvas = await html2canvas(pages[i], {
@@ -842,14 +846,14 @@ async function createMonthlyLegalBillsPDF({
         backgroundColor: "#ffffff",
       });
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
-      if (i > 0) pdf.addPage([LEGAL_PAGE.width, LEGAL_PAGE.height], "p");
+      if (i > 0) pdf.addPage(LEGAL_PAGE.format, "p");
       pdf.addImage(
         imgData,
         "JPEG",
-        0,
-        0,
-        LEGAL_PAGE.width,
-        LEGAL_PAGE.height,
+        LEGAL_PRINT_INSET_MM,
+        LEGAL_PRINT_INSET_MM,
+        printWidth,
+        printHeight,
       );
     }
 
