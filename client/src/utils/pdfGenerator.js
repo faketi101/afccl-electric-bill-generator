@@ -349,7 +349,7 @@ function buildCopyHTML(
         companyMetaLineHeight: "1.2",
         titleFont: "11.6px",
         copyFont: "9px",
-        infoFont: "9px",
+        infoFont: "12px",
         infoGap: "6px",
         tableFont: "12px",
         rowPadding: "2px 6px",
@@ -378,7 +378,7 @@ function buildCopyHTML(
         companyMetaLineHeight: "1.25",
         titleFont: "15px",
         copyFont: "10.5px",
-        infoFont: "9.8px",
+        infoFont: "12px",
         infoGap: "10px",
         tableFont: "12px",
         rowPadding: "4px 8px",
@@ -584,22 +584,22 @@ function buildCopyHTML(
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:${layout.infoGap};font-size:${layout.infoFont};margin-bottom:${layout.headerMarginBottom};">
+      <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:${layout.infoGap};font-size:${layout.infoFont};font-weight:700;margin-bottom:${layout.headerMarginBottom};">
         <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
-          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Customer", "গ্রাহক", language)}:</span>
-          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayName}</span>
+          <span style="white-space:nowrap;font-weight:700;">${formatLabel("Customer", "গ্রাহক", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${displayName}</span>
         </div>
         <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
-          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Shop No", "দোকান নং", language)}:</span>
-          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayShopNo}</span>
+          <span style="white-space:nowrap;font-weight:700;">${formatLabel("Shop No", "দোকান নং", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${displayShopNo}</span>
         </div>
         <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
-          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Meter No", "মিটার নং", language)}:</span>
-          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayMeterNo}</span>
+          <span style="white-space:nowrap;font-weight:700;">${formatLabel("Meter No", "মিটার নং", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${displayMeterNo}</span>
         </div>
         <div style="display:flex;align-items:flex-end;gap:4px;min-width:0;">
-          <span style="white-space:nowrap;font-weight:600;">${formatLabel("Month", "মাস", language)}:</span>
-          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${displayBillMonth}</span>
+          <span style="white-space:nowrap;font-weight:700;">${formatLabel("Month", "মাস", language)}:</span>
+          <span style="flex:1;border-bottom:1px solid #000;padding:0 4px 1px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;">${displayBillMonth}</span>
         </div>
       </div>
 
