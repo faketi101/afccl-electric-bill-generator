@@ -8,17 +8,12 @@ const PDF_LANGUAGE = {
   ENGLISH: "english",
   BOTH: "bangla_english",
 };
-const COPY_TYPES = {
-  OFFICE: "office",
-  CUSTOMER: "customer",
-  BOTH: "both",
+const A4_PAGE = {
+  width: 210,
+  height: 297,
+  format: "a4",
 };
-const LEGAL_PAGE = {
-  width: 215.9,
-  height: 355.6,
-  format: "legal",
-};
-const LEGAL_PRINT_INSET_MM = 4;
+const A4_PRINT_INSET_MM = 0;
 
 function normalizePdfLanguage(language) {
   if (language === "bangla") return PDF_LANGUAGE.BANGLA;
@@ -667,77 +662,47 @@ function sanitizeFilenamePart(value, fallback = "bills") {
   return clean || fallback;
 }
 
-function normalizeCopyType(copyType) {
-  if (copyType === COPY_TYPES.OFFICE) return COPY_TYPES.OFFICE;
-  if (copyType === COPY_TYPES.BOTH) return COPY_TYPES.BOTH;
-  return COPY_TYPES.CUSTOMER;
-}
-
-function buildBatchCopyItems(invoices, copyType, language) {
-  const normalizedCopyType = normalizeCopyType(copyType);
-
-  return invoices.flatMap((invoice, invoiceIndex) => {
-    const serialNoText = formatSerialNoLine(invoice, language, invoiceIndex);
-    const officeCopy = {
-      invoice,
-      copyLabel: formatCopyLabel("Office Copy", "অফিস কপি", language),
-      serialNoText,
-    };
-    const customerCopy = {
-      invoice,
-      copyLabel: formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
-      serialNoText,
-    };
-
-    if (normalizedCopyType === COPY_TYPES.OFFICE) return [officeCopy];
-    if (normalizedCopyType === COPY_TYPES.BOTH) {
-      return [officeCopy, customerCopy];
-    }
-    return [customerCopy];
-  });
-}
-
-function buildLegalBatchHTML({
+function buildA4BatchHTML({
   invoices,
   settings,
   config,
   language,
   withPaidSeal,
-  copyType,
 }) {
   const cutLineText = getCutLineText(language);
-  const copyItems = buildBatchCopyItems(invoices, copyType, language);
-  const pages = [];
+  const pages = invoices
+    .map((invoice, invoiceIndex) => {
+      const serialNoText = formatSerialNoLine(invoice, language, invoiceIndex);
+      const officeCopyHTML = buildCopyHTML(
+        invoice,
+        settings,
+        config,
+        language,
+        withPaidSeal,
+        formatCopyLabel("Office Copy", "অফিস কপি", language),
+        "standard",
+        serialNoText,
+      );
+      const customerCopyHTML = buildCopyHTML(
+        invoice,
+        settings,
+        config,
+        language,
+        withPaidSeal,
+        formatCopyLabel("Customer Copy", "গ্রাহক কপি", language),
+        "standard",
+        serialNoText,
+      );
 
-  for (let i = 0; i < copyItems.length; i += 3) {
-    const slots = copyItems.slice(i, i + 3);
-    while (slots.length < 3) slots.push(null);
-
-    pages.push(`
-      <div class="legal-page">
-        ${slots
-          .map((slot) => {
-            const content = slot
-              ? buildCopyHTML(
-                  slot.invoice,
-                  settings,
-                  config,
-                  language,
-                  withPaidSeal,
-                  slot.copyLabel,
-                  "compact",
-                  slot.serialNoText,
-                )
-              : "";
-
-            return `<div class="legal-slip">${content}</div>`;
-          })
-          .join("")}
-        <div class="legal-cut-line legal-cut-line-one"></div>
-        <div class="legal-cut-line legal-cut-line-two"></div>
+      return `
+      <div class="a4-page">
+        <div class="a4-copy">${officeCopyHTML}</div>
+        <div class="a4-cut-line"></div>
+        <div class="a4-copy">${customerCopyHTML}</div>
       </div>
-    `);
-  }
+    `;
+    })
+    .join("");
 
   return `
 <!DOCTYPE html>
@@ -748,37 +713,31 @@ function buildLegalBatchHTML({
     ${buildFontCSS()}
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; background: #fff; }
-    .legal-page {
-      width: ${LEGAL_PAGE.width}mm;
-      height: ${LEGAL_PAGE.height}mm;
+    .a4-page {
+      width: ${A4_PAGE.width}mm;
+      height: ${A4_PAGE.height}mm;
       position: relative;
       background: white;
       overflow: hidden;
     }
-    .legal-slip {
+    .a4-copy {
       width: 100%;
-      height: calc(100% / 3);
+      height: 50%;
       position: relative;
       overflow: hidden;
     }
-    .legal-cut-line {
+    .a4-cut-line {
       width: 100%;
       height: 0;
       border-top: 1px dashed #999;
-      position: absolute;
+      position: relative;
       left: 0;
       z-index: 2;
     }
-    .legal-cut-line-one {
-      top: calc(100% / 3);
-    }
-    .legal-cut-line-two {
-      top: calc(100% * 2 / 3);
-    }
-    .legal-cut-line::after {
+    .a4-cut-line::after {
       content: '${cutLineText}';
       position: absolute;
-      left: 9mm;
+      left: 15mm;
       top: -10px;
       background: white;
       padding: 2px 8px;
@@ -789,17 +748,16 @@ function buildLegalBatchHTML({
   </style>
 </head>
 <body>
-  ${pages.join("")}
+  ${pages}
 </body>
 </html>`;
 }
 
-async function createMonthlyLegalBillsPDF({
+async function createMonthlyA4BillsPDF({
   invoices,
   settings,
   config = {},
   billMonth,
-  copyType = COPY_TYPES.CUSTOMER,
   withPaidSeal = false,
   autoPrint = false,
 }) {
@@ -808,35 +766,33 @@ async function createMonthlyLegalBillsPDF({
   }
 
   const language = normalizePdfLanguage(config.pdfLanguage);
-  const normalizedCopyType = normalizeCopyType(copyType);
-  const fullHTML = buildLegalBatchHTML({
+  const fullHTML = buildA4BatchHTML({
     invoices,
     settings,
     config,
     language,
     withPaidSeal,
-    copyType: normalizedCopyType,
   });
 
   const container = document.createElement("div");
   container.innerHTML = fullHTML;
   container.style.position = "absolute";
   container.style.left = "-9999px";
-  container.style.width = `${LEGAL_PAGE.width}mm`;
+  container.style.width = `${A4_PAGE.width}mm`;
   document.body.appendChild(container);
 
   await document.fonts.ready;
   await new Promise((resolve) => setTimeout(resolve, 300));
 
   try {
-    const pages = Array.from(container.querySelectorAll(".legal-page"));
+    const pages = Array.from(container.querySelectorAll(".a4-page"));
     const pdf = new jsPDF({
       orientation: "p",
       unit: "mm",
-      format: LEGAL_PAGE.format,
+      format: A4_PAGE.format,
     });
-    const printWidth = LEGAL_PAGE.width - LEGAL_PRINT_INSET_MM * 2;
-    const printHeight = LEGAL_PAGE.height - LEGAL_PRINT_INSET_MM * 2;
+    const printWidth = A4_PAGE.width - A4_PRINT_INSET_MM * 2;
+    const printHeight = A4_PAGE.height - A4_PRINT_INSET_MM * 2;
 
     for (let i = 0; i < pages.length; i += 1) {
       const canvas = await html2canvas(pages[i], {
@@ -846,12 +802,12 @@ async function createMonthlyLegalBillsPDF({
         backgroundColor: "#ffffff",
       });
       const imgData = canvas.toDataURL("image/jpeg", 0.92);
-      if (i > 0) pdf.addPage(LEGAL_PAGE.format, "p");
+      if (i > 0) pdf.addPage(A4_PAGE.format, "p");
       pdf.addImage(
         imgData,
         "JPEG",
-        LEGAL_PRINT_INSET_MM,
-        LEGAL_PRINT_INSET_MM,
+        A4_PRINT_INSET_MM,
+        A4_PRINT_INSET_MM,
         printWidth,
         printHeight,
       );
@@ -864,11 +820,7 @@ async function createMonthlyLegalBillsPDF({
     document.body.removeChild(container);
 
     const monthPart = sanitizeFilenamePart(billMonth, "selected-month");
-    const copyPart =
-      normalizedCopyType === COPY_TYPES.BOTH
-        ? "office-customer"
-        : normalizedCopyType;
-    const filename = `bills-${monthPart}-${copyPart}-legal.pdf`;
+    const filename = `bills-${monthPart}-office-customer-a4.pdf`;
 
     return { pdf, filename };
   } catch (err) {
@@ -1062,15 +1014,15 @@ export async function viewInvoicePDF(
   return filename;
 }
 
-export async function generateMonthlyLegalBillsPDF(options) {
-  const { pdf, filename } = await createMonthlyLegalBillsPDF(options);
+export async function generateMonthlyA4BillsPDF(options) {
+  const { pdf, filename } = await createMonthlyA4BillsPDF(options);
   pdf.save(filename);
   return filename;
 }
 
-export async function viewMonthlyLegalBillsPDF(options) {
+export async function viewMonthlyA4BillsPDF(options) {
   const previewWindow = window.open("", "_blank");
-  const { pdf, filename } = await createMonthlyLegalBillsPDF(options);
+  const { pdf, filename } = await createMonthlyA4BillsPDF(options);
   const blob = pdf.output("blob");
   const url = URL.createObjectURL(blob);
 

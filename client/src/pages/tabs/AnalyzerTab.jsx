@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import api from "../../api";
 import {
   generateInvoicePDF,
-  generateMonthlyLegalBillsPDF,
+  generateMonthlyA4BillsPDF,
   viewInvoicePDF,
-  viewMonthlyLegalBillsPDF,
+  viewMonthlyA4BillsPDF,
 } from "../../utils/pdfGenerator";
 import { downloadFilteredInvoicesXlsx } from "../../utils/xlsxDownload";
 
@@ -87,7 +87,6 @@ export default function AnalyzerTab() {
   const [config, setConfig] = useState({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [batchCopyType, setBatchCopyType] = useState("customer");
   const [batchWithPaidSeal, setBatchWithPaidSeal] = useState(false);
   const [batchPrintBusy, setBatchPrintBusy] = useState(false);
   const [batchPrintError, setBatchPrintError] = useState("");
@@ -210,9 +209,8 @@ export default function AnalyzerTab() {
     return rows.filter((row) => !row.generated && row.customer);
   }, [monthFilter, rows]);
 
-  const monthlyCopyCount =
-    monthlyGeneratedInvoices.length * (batchCopyType === "both" ? 2 : 1);
-  const monthlyLegalPageCount = Math.ceil(monthlyCopyCount / 3);
+  const monthlyCopyCount = monthlyGeneratedInvoices.length * 2;
+  const monthlyA4PageCount = monthlyGeneratedInvoices.length;
 
   useEffect(() => {
     setPage(1);
@@ -408,11 +406,11 @@ export default function AnalyzerTab() {
     );
   };
 
-  const handleMonthlyLegalPdf = async (mode) => {
+  const handleMonthlyA4Pdf = async (mode) => {
     setBatchPrintError("");
 
     if (!monthFilter) {
-      setBatchPrintError("Select a bill month before creating legal print PDF.");
+      setBatchPrintError("Select a bill month before creating the batch PDF.");
       return;
     }
 
@@ -430,21 +428,20 @@ export default function AnalyzerTab() {
         settings,
         config,
         billMonth: monthFilter,
-        copyType: batchCopyType,
         withPaidSeal: batchWithPaidSeal,
       };
 
       if (mode === "download") {
-        await generateMonthlyLegalBillsPDF(options);
+        await generateMonthlyA4BillsPDF(options);
       } else {
-        await viewMonthlyLegalBillsPDF({
+        await viewMonthlyA4BillsPDF({
           ...options,
           autoPrint: mode === "print",
         });
       }
     } catch (err) {
       setBatchPrintError(
-        err?.message || "Could not create the monthly legal print PDF.",
+        err?.message || "Could not create the monthly batch PDF.",
       );
     } finally {
       setBatchPrintBusy(false);
@@ -623,7 +620,7 @@ export default function AnalyzerTab() {
           }}
         >
           <div>
-            <div className="card-label">Legal Batch Print</div>
+            <div className="card-label">Batch Bills</div>
             <div
               style={{
                 color: "#2d3748",
@@ -632,7 +629,7 @@ export default function AnalyzerTab() {
               }}
             >
               {monthFilter
-                ? `${monthlyGeneratedInvoices.length} bills, ${monthlyCopyCount} slips, ${monthlyLegalPageCount} legal pages`
+                ? `${monthlyGeneratedInvoices.length} bills, ${monthlyCopyCount} copies, ${monthlyA4PageCount} A4 pages`
                 : "Select a month"}
             </div>
           </div>
@@ -657,19 +654,6 @@ export default function AnalyzerTab() {
               />
             </label>
 
-            <label style={{ minWidth: "160px" }}>
-              <span className="form-label">Copy</span>
-              <select
-                className="form-input"
-                value={batchCopyType}
-                onChange={(e) => setBatchCopyType(e.target.value)}
-              >
-                <option value="customer">Customer Copy</option>
-                <option value="office">Office Copy</option>
-                <option value="both">Both Copies</option>
-              </select>
-            </label>
-
             <label
               style={{
                 display: "flex",
@@ -690,17 +674,17 @@ export default function AnalyzerTab() {
 
             <button
               type="button"
-              onClick={() => handleMonthlyLegalPdf("print")}
+              onClick={() => handleMonthlyA4Pdf("print")}
               className="btn btn-primary"
               disabled={batchPrintBusy}
               style={{ background: "#1a365d" }}
             >
-              {batchPrintBusy ? "Generating..." : "Print Legal PDF"}
+              {batchPrintBusy ? "Generating..." : "Print All"}
             </button>
 
             <button
               type="button"
-              onClick={() => handleMonthlyLegalPdf("download")}
+              onClick={() => handleMonthlyA4Pdf("download")}
               className="btn"
               disabled={batchPrintBusy}
               style={{
@@ -709,7 +693,7 @@ export default function AnalyzerTab() {
                 border: "1px solid #90cdf4",
               }}
             >
-              Download Legal PDF
+              Download All
             </button>
           </div>
         </div>
