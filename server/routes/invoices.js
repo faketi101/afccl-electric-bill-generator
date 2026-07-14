@@ -6,11 +6,25 @@ const router = express.Router();
 router.use(auth);
 
 // Auto-generate invoice number: INV-YYYYMM-XXXX
-async function generateInvoiceNo() {
-  const now = new Date();
-  const prefix = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}-`;
-  const count = await Invoice.countDocuments();
-  return `${prefix}${String(count + 1).padStart(4, "0")}`;
+async function generateInvoiceNo(billMonth) {
+  const monthMatch = String(billMonth).match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  if (!monthMatch) {
+    throw new Error("Bill month must use YYYY-MM format");
+  }
+
+  const prefix = `INV-${monthMatch[1]}${monthMatch[2]}-`;
+  const latestInvoice = await Invoice.findOne({
+    invoiceNo: { $regex: `^${prefix}\\d+$` },
+  })
+    .sort({ invoiceNo: -1 })
+    .select("invoiceNo")
+    .lean();
+
+  const latestSequence = latestInvoice
+    ? Number(latestInvoice.invoiceNo.slice(prefix.length))
+    : 0;
+
+  return `${prefix}${String(latestSequence + 1).padStart(4, "0")}`;
 }
 
 // GET /api/invoices  (with optional filters: status, customerId)
@@ -52,7 +66,7 @@ router.post("/", async (req, res) => {
           message: "Invoice already exists for this customer and month",
         });
     }
-    const invoiceNo = await generateInvoiceNo();
+    const invoiceNo = await generateInvoiceNo(billMonth);
     const invoice = new Invoice({ ...req.body, invoiceNo });
     await invoice.save();
     const populated = await Invoice.findById(invoice._id).populate("customer");
